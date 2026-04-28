@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+{% block progress %}
+<nav class="workflow-progress" aria-label="Avanzamento">
+  <a href="{{ url_for('operation') }}">Operazione</a>
+  <a class="active" href="{{ url_for('glossary_rules') }}">Regole</a>
+  <span class="disabled">Revisione</span>
+  <span class="disabled">Output</span>
+</nav>
+{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="page-head">
+    <div>
+      <h1>Glossario e Regole</h1>
+      <p>Imposta da dove leggere glossario e documenti. Le scelte di questa pagina vengono salvate, tranne la lista dei file selezionati per una singola elaborazione.</p>
+    </div>
+  </div>
+  <form method="post" enctype="multipart/form-data" class="stack" data-wizard-form>
+    <div class="form-section path-stack">
+      <div>
+        <h2>Sorgenti</h2>
+        <p class="muted">La root progetto serve per mostrare path relativi e per scansionare i documenti. Il glossario puo essere un path locale o un URL.</p>
+      </div>
+      <label>Root progetto
+        <span class="field-with-action wide">
+          <input id="repo_root" name="repo_root" value="{{ local.default_repo_root }}" data-glossary-source data-persist>
+          <button type="button" data-picker data-kind="directory" data-target="#repo_root">Scegli</button>
+        </span>
+      </label>
+      <label>Path glossario .tex
+        <span class="field-with-action wide">
+          <input id="glossary_path" name="glossary_path" value="{{ config.glossary_path }}" data-glossary-source data-persist>
+          <button type="button" data-picker data-kind="file" data-target="#glossary_path">Scegli</button>
+        </span>
+      </label>
+      <label>URL finale Glossario.pdf
+        <input id="glossary_pdf_url" name="glossary_pdf_url" value="{{ config.glossary_pdf_url }}" data-glossary-source data-persist>
+      </label>
+      <label>Formato anchor
+        <input id="anchor_format" name="anchor_format" value="{{ config.anchor_format }}" data-glossary-source data-persist>
+      </label>
+    </div>
+
+    <section class="form-section rules-section">
+      <div>
+        <h2>Regole di esclusione</h2>
+        <p class="muted">Queste regole dicono al linker dove non deve intervenire. Sono conservative: meglio saltare un caso dubbio che inserire un link nel posto sbagliato.</p>
+      </div>
+      <div class="checks">
+        <label class="check"><input type="checkbox" name="ignored_sections" value="frontespizio" {% if "frontespizio" in config.ignored_sections %}checked{% endif %} data-persist> Salta frontespizio</label>
+        <label class="check"><input type="checkbox" name="ignored_sections" value="indice" {% if "indice" in config.ignored_sections %}checked{% endif %} data-persist> Salta indici</label>
+        <label class="check"><input type="checkbox" name="skip_titles" {% if "section" in config.ignored_commands %}checked{% endif %} data-persist> Salta titoli e didascalie</label>
+      </div>
+
+      <div class="rule-editor" data-rule-editor data-target="#exclude_file_patterns" data-values='{{ config.exclude_file_patterns | tojson }}'>
+        <div>
+          <h3>Pattern file esclusi</h3>
+          <p class="muted">Percorsi o glob da ignorare durante la scansione dei documenti.</p>
+        </div>
+        <textarea id="exclude_file_patterns" name="exclude_file_patterns" hidden data-persist>{{ config.exclude_file_patterns | join('\n') }}</textarea>
+        <ol class="rule-list" data-rule-list></ol>
+        <div class="rule-controls">
+          <input data-rule-input placeholder="es. **/build/**">
+          <button type="button" data-rule-add>Aggiungi</button>
+          <button type="button" data-rule-edit>Modifica</button>
+          <button type="button" data-rule-delete>Elimina</button>
+        </div>
+      </div>
+
+      <div class="rule-editor" data-rule-editor data-target="#ignored_environments" data-values='{{ config.ignored_environments | tojson }}'>
+        <div>
+          <h3>Ambienti LaTeX ignorati</h3>
+          <p class="muted">Il contenuto di questi ambienti non viene analizzato.</p>
+        </div>
+        <textarea id="ignored_environments" name="ignored_environments" hidden data-persist>{{ config.ignored_environments | join('\n') }}</textarea>
+        <ol class="rule-list" data-rule-list></ol>
+        <div class="rule-controls">
+          <input data-rule-input placeholder="es. minted">
+          <button type="button" data-rule-add>Aggiungi</button>
+          <button type="button" data-rule-edit>Modifica</button>
+          <button type="button" data-rule-delete>Elimina</button>
+        </div>
+      </div>
+
+      <div class="rule-editor" data-rule-editor data-target="#ignored_commands" data-values='{{ config.ignored_commands | tojson }}'>
+        <div>
+          <h3>Comandi LaTeX ignorati</h3>
+          <p class="muted">Gli argomenti di questi comandi vengono trattati in modo conservativo.</p>
+        </div>
+        <textarea id="ignored_commands" name="ignored_commands" hidden data-persist>{{ config.ignored_commands | join('\n') }}</textarea>
+        <ol class="rule-list" data-rule-list></ol>
+        <div class="rule-controls">
+          <input data-rule-input placeholder="es. caption">
+          <button type="button" data-rule-add>Aggiungi</button>
+          <button type="button" data-rule-edit>Modifica</button>
+          <button type="button" data-rule-delete>Elimina</button>
+        </div>
+      </div>
+    </section>
+
+    {% if operation == "link-documents" %}
+      <section class="input-group">
+        <div class="section-head">
+          <div>
+            <h2>Documenti da linkare</h2>
+            <p class="muted">Seleziona singoli file oppure fai rilevare i <code>.tex</code>. I file dentro la root sono mostrati come path relativi; quelli fuori root restano assoluti.</p>
+          </div>
+        </div>
+        <div class="document-source-grid">
+          <section>
+            <h3>Selezione manuale</h3>
+            <p class="muted">Scegli uno o piu documenti specifici dal file system.</p>
+            <button type="button" data-picker data-kind="file" data-multiple="true" data-target="#tex_paths" data-root="#repo_root" data-file-list="#tex_file_list">Scegli file</button>
+          </section>
+          <section>
+            <h3>Scansione automatica</h3>
+            <p class="muted">Rileva tutti i <code>.tex</code> nella root progetto oppure in una cartella scelta, applicando subito le regole di esclusione.</p>
+            <label>Cartella da scansionare
+              <span class="field-with-action wide">
+                <input id="source_dir" name="source_dir" value="{{ local.last_source_dir }}" placeholder="." data-persist>
+                <button type="button" data-picker data-kind="directory" data-target="#source_dir">Scegli</button>
+              </span>
+            </label>
+            <div class="scan-actions">
+              <button type="button" data-discover-tex data-root="#repo_root" data-source="#source_dir" data-source-value="." data-glossary="#glossary_path" data-target="#tex_paths" data-file-list="#tex_file_list">Scansiona root progetto</button>
+              <button class="primary" type="button" data-discover-tex data-root="#repo_root" data-source="#source_dir" data-glossary="#glossary_path" data-target="#tex_paths" data-file-list="#tex_file_list">Scansiona cartella scelta</button>
+            </div>
+          </section>
+        </div>
+        <input type="hidden" id="tex_paths" name="tex_paths">
+        <div id="tex_file_list" class="file-list" aria-live="polite">
+          <p class="empty-state">Nessun documento selezionato.</p>
+        </div>
+        <p id="tex_discover_status" class="status-line" aria-live="polite"></p>
+        <div class="inline-add">
+          <input id="manual_tex_path" placeholder="percorso/relativo/documento.tex">
+          <button type="button" data-add-file data-source="#manual_tex_path" data-target="#tex_paths" data-file-list="#tex_file_list">Aggiungi</button>
+        </div>
+        <fieldset class="segmented-field">
+          <legend>Ordine revisione manuale</legend>
+          <p class="muted">Scegli come scorrere le occorrenze quando ci sono termini in modalità Manuale.</p>
+          <label><input type="radio" name="review_order" value="by_term" {% if local.last_review_order != "by_file" %}checked{% endif %} data-persist> Per termine</label>
+          <label><input type="radio" name="review_order" value="by_file" {% if local.last_review_order == "by_file" %}checked{% endif %} data-persist> Per file</label>
+        </fieldset>
+      </section>
+    {% else %}
+      <section class="input-group">
+        <h2>Nuove voci</h2>
+        <p class="muted">Inserisci gli ID delle voci appena aggiunte al glossario. Se lasci vuoto, l'app usa tutte le voci disponibili.</p>
+        <label>ID delle nuove voci, separati da virgola
+          <input name="new_entry_ids" value="{{ local.last_new_entry_ids }}" placeholder="accuratezza, precisione" data-persist>
+        </label>
+      </section>
+    {% endif %}
+
+    <section class="form-section">
+      <div>
+        <div>
+          <h2>Glossario rilevato</h2>
+          <p class="muted">Le voci sono salvate in <code>{{ entries_path.name }}</code>. Apri la finestra dedicata per consultarle e modificare Automatico/Manuale.</p>
+        </div>
+      </div>
+      <div class="stats compact-stats">
+        <div><strong>{{ entries | length }}</strong><span>Termini rilevati</span></div>
+        <div><strong>{{ entries | selectattr("mode", "equalto", "manual") | list | length }}</strong><span>Revisione manuale</span></div>
+        <div><strong>{{ entries | rejectattr("mode", "equalto", "manual") | list | length }}</strong><span>Automatici</span></div>
+      </div>
+      <div class="actions glossary-actions">
+        <button type="button" data-refresh-glossary>Aggiorna voci</button>
+        <a class="button-link" href="{{ url_for('entries') }}" target="_blank" rel="noopener">Apri glossario</a>
+      </div>
+      <p id="glossary_preview_status" class="status-line" aria-live="polite"></p>
+    </section>
+
+    <div class="actions">
+      <button class="primary" name="action" value="continue" type="submit">Avvia elaborazione</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

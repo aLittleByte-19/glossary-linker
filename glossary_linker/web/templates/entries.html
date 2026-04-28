@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <div class="page-head">
+    <div>
+      <h1>Glossario Rilevato</h1>
+      <p>Consulta le voci salvate in <code>{{ entries_path.name }}</code> e scegli quali termini richiedono revisione manuale.</p>
+    </div>
+    <a class="button-link" href="{{ url_for('glossary_rules') }}">Torna al wizard</a>
+  </div>
+
+  <form method="post" class="stack" data-entries-form>
+    <div class="entries-toolbar">
+      <div class="stats compact-stats">
+        <div><strong>{{ entries | length }}</strong><span>Termini</span></div>
+        <div><strong data-manual-count>{{ entries | selectattr("mode", "equalto", "manual") | list | length }}</strong><span>Manuali</span></div>
+        <div><strong data-auto-count>{{ entries | rejectattr("mode", "equalto", "manual") | list | length }}</strong><span>Automatici</span></div>
+      </div>
+      <div class="entries-tools">
+        <button class="primary" type="submit">Salva modifiche</button>
+      </div>
+    </div>
+
+    <section class="entries-section" data-entry-section="manual">
+      <div class="section-head">
+        <div>
+          <h2>Revisione Manuale</h2>
+          <p class="muted">Questi termini aprono il flow di revisione occorrenza per occorrenza.</p>
+        </div>
+        <input class="search" type="search" data-entry-search="manual" aria-label="Cerca termini manuali" placeholder="Cerca nei manuali">
+      </div>
+      <div class="table-wrap">
+        <table class="entries-table compact">
+          <thead>
+            <tr><th>Termine</th><th>Definizione</th><th>Alias</th><th>Modalità</th></tr>
+          </thead>
+          <tbody data-entry-table="manual">
+            {% for entry in entries | sort(attribute="term") %}
+              {% if entry.mode == "manual" %}
+                {% include "partials/entry_row.html" %}
+              {% endif %}
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="pager" data-entry-pager="manual">
+        <button type="button" data-page-prev="manual">‹</button>
+        <span data-page-label="manual">1 / 1</span>
+        <button type="button" data-page-next="manual">›</button>
+      </div>
+    </section>
+
+    <section class="entries-section" data-entry-section="automatic">
+      <div class="section-head">
+        <div>
+          <h2>Revisione Automatica</h2>
+          <p class="muted">Questi termini vengono collegati automaticamente in tutte le occorrenze valide.</p>
+        </div>
+        <input class="search" type="search" data-entry-search="automatic" aria-label="Cerca termini automatici" placeholder="Cerca negli automatici">
+      </div>
+      <div class="table-wrap">
+        <table class="entries-table compact">
+          <thead>
+            <tr><th>Termine</th><th>Definizione</th><th>Alias</th><th>Modalità</th></tr>
+          </thead>
+          <tbody data-entry-table="automatic">
+            {% for entry in entries | sort(attribute="term") %}
+              {% if entry.mode != "manual" %}
+                {% include "partials/entry_row.html" %}
+              {% endif %}
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="pager" data-entry-pager="automatic">
+        <button type="button" data-page-prev="automatic">‹</button>
+        <span data-page-label="automatic">1 / 1</span>
+        <button type="button" data-page-next="automatic">›</button>
+      </div>
+    </section>
+
+    <div class="actions">
+      <button class="primary" type="submit">Salva glossario rilevato</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

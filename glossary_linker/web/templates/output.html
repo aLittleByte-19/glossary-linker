@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block progress %}
+<nav class="workflow-progress" aria-label="Avanzamento">
+  <a href="{{ url_for('operation') }}">Operazione</a>
+  <a href="{{ url_for('glossary_rules') }}">Regole</a>
+  {% if has_review %}
+    <a href="{{ url_for('review', job_id=job_id, index=0) }}">Revisione</a>
+  {% else %}
+    <span class="disabled">Revisione</span>
+  {% endif %}
+  <a class="active" href="{{ url_for('output', job_id=job_id) }}">Output</a>
+</nav>
+{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="page-head">
+    <div>
+      <h1>Output e Report</h1>
+      <p>Controlla i risultati prima di salvare. L'app non sovrascrive i sorgenti senza una conferma esplicita.</p>
+    </div>
+    <a class="button-link" href="{{ url_for('operation') }}">Torna alla home</a>
+  </div>
+
+  <div class="stats">
+    <div><strong>{{ report.processed_files | length }}</strong><span>File processati</span></div>
+    <div><strong>{{ report.excluded_files | length }}</strong><span>File esclusi</span></div>
+    <div><strong>{{ report.automatic_links }}</strong><span>Link automatici</span></div>
+    <div><strong>{{ report.manual_links }}</strong><span>Link manuali</span></div>
+    <div><strong>{{ report.skipped_occurrences }}</strong><span>Occorrenze saltate</span></div>
+  </div>
+
+  <div class="output-list">
+    {% for result in results %}
+      <article class="output-card">
+        <div>
+          <p class="eyebrow">Sorgente</p>
+          <code>{{ result.source_label }}</code>
+        </div>
+        <div>
+          <p class="eyebrow">Output</p>
+          <code>{{ result.output_label }}</code>
+        </div>
+        <button type="button" data-open-modal="output-dialog-{{ loop.index }}">Azioni</button>
+      </article>
+
+      <dialog id="output-dialog-{{ loop.index }}" class="modal">
+        <form method="dialog" class="modal-close">
+          <button type="submit" aria-label="Chiudi">x</button>
+        </form>
+        <h2>Azioni sul file</h2>
+        <p class="muted">Scegli come salvare o compilare questo risultato.</p>
+        <dl class="modal-paths">
+          <div><dt>Sorgente</dt><dd><code>{{ result.source_label }}</code></dd></div>
+          <div><dt>Output</dt><dd><code>{{ result.output_label }}</code></dd></div>
+        </dl>
+        <div class="modal-actions">
+          <form method="post" action="{{ url_for('save_output', job_id=job_id) }}">
+            <input type="hidden" name="source" value="{{ result.source }}">
+            <input type="hidden" name="mode" value="linked">
+            <button class="primary" type="submit">Salva .linked.tex</button>
+          </form>
+          <form method="post" action="{{ url_for('save_output', job_id=job_id) }}">
+            <input type="hidden" name="source" value="{{ result.source }}">
+            <input type="hidden" name="mode" value="overwrite">
+            <button type="submit">Sovrascrivi sorgente</button>
+          </form>
+          <form method="post" action="{{ url_for('compile_output', job_id=job_id) }}" class="compile-form">
+            <input type="hidden" name="source" value="{{ result.source }}">
+            <label>Nome PDF
+              <input name="pdf_name" placeholder="{{ result.default_pdf_name }}">
+            </label>
+            <button type="submit">Compila PDF</button>
+          </form>
+          <p class="muted">La compilazione usa il tuo ambiente LaTeX locale e non modifica i path o gli asset del progetto.</p>
+        </div>
+      </dialog>
+    {% else %}
+      <p class="empty-state">Nessun file prodotto. Torna alla home e avvia una nuova elaborazione.</p>
+    {% endfor %}
+  </div>
+
+  <div class="output-footer">
+    <form method="post" action="{{ url_for('save_output', job_id=job_id) }}" class="actions">
+      <input type="hidden" name="mode" value="linked">
+      <button name="report_format" value="md" type="submit">Salva tutti e report .md</button>
+      <button name="report_format" value="json" type="submit">Salva tutti e report .json</button>
+    </form>
+    <a class="button-link primary-link" href="{{ url_for('operation') }}">Torna alla home</a>
+  </div>
+
+  {% if report.missing_terms %}
+    <section class="report-section">
+      <h2>Termini non trovati</h2>
+      <p>{{ report.missing_terms | join(", ") }}</p>
+    </section>
+  {% endif %}
+  {% if report.warnings or report.errors %}
+    <section class="report-section">
+      <h2>Warning ed errori</h2>
+      <ul>
+        {% for item in report.warnings + report.errors %}
+          <li>{{ item }}</li>
+        {% endfor %}
+      </ul>
+    </section>
+  {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,32 @@
+glossary_pdf_url: https://example.github.io/Documentazione/Glossario.pdf
+glossary_path: /Users/leonardo/Desktop/git_projects.nosync/glossary-linker/vendor/documentazione-glossario/RTB/Glossario/Glossario.tex
+anchor_format: '#gls:{id}'
+exclude_file_patterns:
+- '*.linked.tex'
+- '**/build/**'
+- '**/output/**'
+- '**/dist/**'
+- '**/tmp/**'
+- '**/prove/**'
+- '**/prompt.tex'
+ignored_environments:
+- verbatim
+- lstlisting
+- minted
+- listing
+- code
+ignored_commands:
+- href
+- url
+- glslink
+- section
+- subsection
+- subsubsection
+- paragraph
+- subparagraph
+- title
+- caption
+ignored_sections:
+- frontespizio
+- indice
+entries: {}

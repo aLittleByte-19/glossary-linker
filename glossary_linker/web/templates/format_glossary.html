@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <div class="page-head">
+    <div>
+      <h1>Formatta Glossario .tex</h1>
+      <p>Usa questo flusso quando il glossario contiene voci come \subsection{Termine} e vuoi aggiungere ID stabili.</p>
+    </div>
+  </div>
+
+  <form method="post" enctype="multipart/form-data" class="stack">
+    <div class="form-section path-stack">
+      <h2>Destinazione</h2>
+      <label>Root progetto
+        <span class="field-with-action wide">
+          <input id="format_repo_root" name="repo_root" value="{{ local.default_repo_root }}" readonly>
+          <button type="button" data-picker data-kind="directory" data-target="#format_repo_root">Scegli</button>
+        </span>
+      </label>
+      <label>Path glossario .tex
+        <span class="field-with-action wide">
+          <input id="format_glossary_path" name="glossary_path" value="{{ config.glossary_path }}">
+          <button type="button" data-picker data-kind="file" data-target="#format_glossary_path">Scegli</button>
+        </span>
+      </label>
+    </div>
+
+    <div class="form-section">
+      <h2>Input glossario</h2>
+      <p class="muted">Puoi caricare un file oppure incollare il contenuto. L'anteprima non salva nulla finche non confermi.</p>
+      <label>Carica file .tex
+        <input type="file" name="glossary_file" accept=".tex">
+      </label>
+      <label>Oppure incolla il contenuto
+        <textarea name="glossary_text" rows="12">{{ formatted_text }}</textarea>
+      </label>
+    </div>
+
+    {% if entries %}
+      <div class="form-section">
+        <h2>Voci rilevate</h2>
+        <div class="entry-preview">
+          {% for entry in entries[:24] %}
+            <span><code>{{ entry.id }}</code>{{ entry.term }}</span>
+          {% endfor %}
+        </div>
+      </div>
+    {% endif %}
+
+    <div class="actions">
+      <button name="action" value="format" type="submit">Formatta anteprima</button>
+      <button class="primary" name="action" value="save_formatted" type="submit">Formatta e salva glossario</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

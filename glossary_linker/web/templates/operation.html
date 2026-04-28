@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block progress %}
+<nav class="workflow-progress" aria-label="Avanzamento">
+  <a class="active" href="{{ url_for('operation') }}">Operazione</a>
+  <a href="{{ url_for('glossary_rules') }}">Regole</a>
+  <span class="disabled">Revisione</span>
+  <span class="disabled">Output</span>
+</nav>
+{% endblock %}
+{% block content %}
+<section class="panel narrow">
+  <div class="page-head">
+    <div>
+      <h1>Scegli cosa fare</h1>
+      <p>Questo wizard lavora sui sorgenti LaTeX senza modificarli subito: prima genera anteprime e file <code>.linked.tex</code>, poi sarai tu a decidere cosa salvare.</p>
+    </div>
+  </div>
+  <form method="post" action="{{ url_for('set_operation') }}" class="choice-list">
+    <label class="choice">
+      <input type="radio" name="operation" value="link-documents" {% if selected_operation == "link-documents" %}checked{% endif %}>
+      <span>
+        <strong>Linka documenti</strong>
+        <small>Parti da uno o piu file .tex e genera copie .linked.tex da controllare.</small>
+      </span>
+    </label>
+    <label class="choice">
+      <input type="radio" name="operation" value="update-glossary" {% if selected_operation == "update-glossary" %}checked{% endif %}>
+      <span>
+        <strong>Aggiorna per nuove voci glossario</strong>
+        <small>Scansiona la root progetto e lavora solo sulle nuove voci indicate.</small>
+      </span>
+    </label>
+    <label class="choice">
+      <input type="radio" name="operation" value="format-glossary" {% if selected_operation == "format-glossary" %}checked{% endif %}>
+      <span>
+        <strong>Formatta glossario .tex</strong>
+        <small>Prepara un glossario basato su subsection al formato strutturato con ID stabili.</small>
+      </span>
+    </label>
+    <button class="primary" type="submit">Continua</button>
+  </form>
+</section>
+{% endblock %}

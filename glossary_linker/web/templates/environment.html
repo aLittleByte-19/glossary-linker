@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel narrow">
+  <h1>Verifica Ambiente</h1>
+  <table>
+    <thead><tr><th>Strumento</th><th>Risultato</th></tr></thead>
+    <tbody>
+      {% for name, result in tools.items() %}
+        <tr><td>{{ name }}</td><td>{{ result }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

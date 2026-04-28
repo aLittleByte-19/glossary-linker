@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <div class="page-head">
+    <div>
+      <h1>Impostazioni</h1>
+      <p>Preferenze personali del computer locale, separate dalle regole editoriali condivise.</p>
+    </div>
+  </div>
+
+  <nav class="tabs" aria-label="Schede impostazioni">
+    <a href="{{ url_for('settings') }}" class="{% if tab != 'check' %}active{% endif %}">Ambiente</a>
+    <a href="{{ url_for('settings', tab='check') }}" class="{% if tab == 'check' %}active{% endif %}">Verifica</a>
+  </nav>
+
+  {% if tab == "check" %}
+    <section class="form-section">
+      <h2>Verifica Ambiente</h2>
+      <table>
+        <thead><tr><th>Strumento</th><th>Risultato</th></tr></thead>
+        <tbody>
+          {% for name, result in tools.items() %}
+            <tr><td>{{ name }}</td><td><code>{{ result }}</code></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  {% else %}
+    <form method="post" class="settings-form">
+      <div class="form-section">
+        <h2>Percorsi</h2>
+        <label>Root repo predefinita
+          <span class="field-with-action wide">
+            <input id="default_repo_root" name="default_repo_root" value="{{ local.default_repo_root }}">
+            <button type="button" data-picker data-kind="directory" data-target="#default_repo_root">Scegli</button>
+          </span>
+        </label>
+        <label>Cartella temporanea
+          <span class="field-with-action wide">
+            <input id="temporary_directory" name="temporary_directory" value="{{ local.temporary_directory }}">
+            <button type="button" data-picker data-kind="directory" data-target="#temporary_directory">Scegli</button>
+          </span>
+        </label>
+      </div>
+
+      <div class="form-section">
+        <h2>Strumenti LaTeX</h2>
+        {% for item in [
+          ("latexmk", "latexmk_path", local.latexmk_path),
+          ("pdflatex", "pdflatex_path", local.pdflatex_path),
+          ("xelatex", "xelatex_path", local.xelatex_path),
+          ("lualatex", "lualatex_path", local.lualatex_path)
+        ] %}
+          <label>{{ item[0] }}
+            <span class="field-with-action wide">
+              <input id="{{ item[1] }}" name="{{ item[1] }}" value="{{ item[2] }}">
+              <button type="button" data-picker data-kind="file" data-target="#{{ item[1] }}">Scegli</button>
+            </span>
+          </label>
+        {% endfor %}
+      </div>
+
+      <div class="form-section compact-grid">
+        <h2>Compilazione</h2>
+        <label>Compilatore preferito
+          <select name="preferred_compiler">
+            {% for compiler in ["latexmk", "pdflatex", "xelatex", "lualatex"] %}
+              <option value="{{ compiler }}" {% if local.preferred_compiler == compiler %}selected{% endif %}>{{ compiler }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Timeout compilazione
+          <input type="number" min="1" name="compile_timeout_seconds" value="{{ local.compile_timeout_seconds }}">
+        </label>
+        <label>Massimo passaggi
+          <input type="number" min="1" name="max_compile_passes" value="{{ local.max_compile_passes }}">
+        </label>
+        <label>Porta server locale
+          <input type="number" min="1" name="local_server_port" value="{{ local.local_server_port }}">
+        </label>
+        <label>Livello log
+          <input name="log_level" value="{{ local.log_level }}">
+        </label>
+        <label>Browser preferito
+          <input name="preferred_browser" value="{{ local.preferred_browser }}">
+        </label>
+      </div>
+
+      <div class="form-section checks">
+        <label class="check"><input type="checkbox" name="auto_open_pdf" {% if local.auto_open_pdf %}checked{% endif %}> Apri PDF dopo compilazione</label>
+        <label class="check"><input type="checkbox" name="clean_aux_files" {% if local.clean_aux_files %}checked{% endif %}> Pulisci file ausiliari</label>
+      </div>
+
+      <div class="actions"><button class="primary" type="submit">Salva impostazioni</button></div>
+    </form>
+  {% endif %}
+</section>
+{% endblock %}
