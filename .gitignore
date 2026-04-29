@@ -219,6 +219,7 @@ __marimo__/
 
 # Glossary Linker local artifacts
 glossary-linker.local.yml
+.glossary-linker-secret
 *.linked.tex
 reports/
 vendor/

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import secrets
 import uuid
 from dataclasses import asdict
 from pathlib import Path
@@ -48,7 +50,7 @@ JOBS: dict[str, dict] = {}
 
 def create_app() -> Flask:
     app = Flask(__name__)
-    app.secret_key = "glossary-linker-local-dev"
+    app.secret_key = os.environ.get("FLASK_SECRET_KEY") or _load_or_generate_secret_key()
 
     @app.get("/")
     def operation():
@@ -344,7 +346,10 @@ def create_app() -> Flask:
 
     @app.route("/review/<job_id>/<int:index>", methods=["GET", "POST"])
     def review(job_id: str, index: int):
-        job = JOBS[job_id]
+        job = JOBS.get(job_id)
+        if job is None:
+            flash("Sessione di revisione non trovata o scaduta.", "error")
+            return redirect(url_for("operation"))
         occurrences = [_occurrence_from_dict(item) for item in job["occurrences"]]
         if request.method == "POST":
             action = request.form.get("action", "next")
@@ -388,7 +393,10 @@ def create_app() -> Flask:
 
     @app.get("/output/<job_id>")
     def output(job_id: str):
-        job = JOBS[job_id]
+        job = JOBS.get(job_id)
+        if job is None:
+            flash("Sessione di elaborazione non trovata o scaduta.", "error")
+            return redirect(url_for("operation"))
         config = _editorial_from_dict(job["config"])
         entries = [_entry_from_dict(item) for item in job["entries"]]
         paths = [Path(value) for value in job["paths"]]
@@ -410,7 +418,10 @@ def create_app() -> Flask:
 
     @app.post("/save/<job_id>")
     def save_output(job_id: str):
-        job = JOBS[job_id]
+        job = JOBS.get(job_id)
+        if job is None:
+            flash("Sessione di salvataggio non trovata o scaduta.", "error")
+            return redirect(url_for("operation"))
         mode = request.form.get("mode", "linked")
         source = request.form.get("source", "")
         saved: list[str] = []
@@ -438,7 +449,10 @@ def create_app() -> Flask:
         local = _load_local()
         source = request.form.get("source", "")
         pdf_name = request.form.get("pdf_name") or None
-        job = JOBS[job_id]
+        job = JOBS.get(job_id)
+        if job is None:
+            flash("Sessione di compilazione non trovata o scaduta.", "error")
+            return redirect(url_for("operation"))
         for item in job.get("results", []):
             if item["source"] == source:
                 target = Path(item["output"])
@@ -458,6 +472,24 @@ def main() -> None:
     local = _load_local()
     app = create_app()
     app.run(host="127.0.0.1", port=local.local_server_port, debug=False)
+
+
+def _load_or_generate_secret_key() -> str:
+    key_path = LOCAL_PATH.parent / ".glossary-linker-secret"
+    if key_path.exists():
+        return key_path.read_text(encoding="utf-8").strip()
+    key = secrets.token_hex(32)
+    try:
+        key_path.write_text(key, encoding="utf-8")
+        key_path.chmod(0o600)
+    except OSError as exc:
+        import warnings
+        warnings.warn(
+            f"Impossibile salvare la chiave segreta in {key_path}: {exc}. "
+            "Le sessioni non sopravviveranno al riavvio del server.",
+            stacklevel=2,
+        )
+    return key
 
 
 def _load_editorial() -> EditorialConfig:
