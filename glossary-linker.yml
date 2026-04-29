@@ -1,6 +1,8 @@
-glossary_pdf_url: https://example.github.io/Documentazione/Glossario.pdf
+glossary_pdf_url: /Users/leonardo/Desktop/git_projects.nosync/glossary-linker/vendor/documentazione-glossario/RTB/Glossario/Glossario.pdf
 glossary_path: /Users/leonardo/Desktop/git_projects.nosync/glossary-linker/vendor/documentazione-glossario/RTB/Glossario/Glossario.tex
-anchor_format: '#gls:{id}'
+anchor_format: '#nameddest=gls:{id}'
+glossary_detection: auto
+excluded_entry_ids: []
 exclude_file_patterns:
 - '*.linked.tex'
 - '**/build/**'
@@ -19,6 +21,8 @@ ignored_commands:
 - href
 - url
 - glslink
+- part
+- chapter
 - section
 - subsection
 - subsubsection

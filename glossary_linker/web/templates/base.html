@@ -10,10 +10,21 @@
   <body>
     <header class="topbar">
       <a class="brand" href="{{ url_for('operation') }}">
-        <strong>Glossary Linker</strong>
-        <span>Wizard locale per documenti LaTeX</span>
+        <span class="brand-mark" aria-hidden="true">G</span>
+        <span>
+          <strong>Glossary Linker</strong>
+          <small>Link controllati per documenti LaTeX</small>
+        </span>
       </a>
       <nav class="top-actions" aria-label="Azioni principali">
+        <a class="icon-link" href="{{ url_for('help_page') }}" aria-label="Guida">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+            <path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15Z"></path>
+            <path d="M8 6h8"></path>
+            <path d="M8 10h6"></path>
+          </svg>
+        </a>
         <a class="icon-link" href="{{ url_for('settings') }}" aria-label="Impostazioni">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"></path>
@@ -24,11 +35,13 @@
     </header>
     <main class="shell">
       {% block progress %}{% endblock %}
-      {% with messages = get_flashed_messages() %}
+      {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
-          <section class="notice" aria-live="polite">
-            {% for message in messages %}
-              <p>{{ message }}</p>
+          <section class="alerts" aria-live="polite">
+            {% for category, message in messages %}
+              <div class="alert alert-{{ category if category != 'message' else 'info' }}">
+                <p>{{ message }}</p>
+              </div>
             {% endfor %}
           </section>
         {% endif %}

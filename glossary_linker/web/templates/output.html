@@ -16,9 +16,29 @@
   <div class="page-head">
     <div>
       <h1>Output e Report</h1>
-      <p>Controlla i risultati prima di salvare. L'app non sovrascrive i sorgenti senza una conferma esplicita.</p>
+      <p>Controlla i risultati prima di salvare. Puoi produrre copie <code>.linked.tex</code> oppure sovrascrivere i sorgenti solo da questa schermata.</p>
     </div>
-    <a class="button-link" href="{{ url_for('operation') }}">Torna alla home</a>
+    <div class="page-actions">
+      <a class="button-link" href="{{ url_for('operation') }}">Home</a>
+      {% if has_review %}
+        <a class="button-link" href="{{ url_for('review', job_id=job_id, index=0) }}">Rivedi decisioni</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="guidance-strip">
+    <div>
+      <strong>Salvataggio non distruttivo</strong>
+      <span>Usa <code>.linked.tex</code> per controllare il risultato prima di sostituire i sorgenti.</span>
+    </div>
+    <div>
+      <strong>Report opzionale</strong>
+      <span>Generalo solo quando vuoi archiviare un riepilogo dell'elaborazione.</span>
+    </div>
+    <div>
+      <strong>Compilazione</strong>
+      <span>La compilazione usa gli strumenti LaTeX locali configurati in Impostazioni.</span>
+    </div>
   </div>
 
   <div class="stats">
@@ -27,6 +47,75 @@
     <div><strong>{{ report.automatic_links }}</strong><span>Link automatici</span></div>
     <div><strong>{{ report.manual_links }}</strong><span>Link manuali</span></div>
     <div><strong>{{ report.skipped_occurrences }}</strong><span>Occorrenze saltate</span></div>
+    <div><strong>{{ report.missing_terms | length }}</strong><span>Termini non trovati</span></div>
+  </div>
+
+  {% if report.missing_terms %}
+    <section class="alert alert-warning report-alert">
+      <h2>Alcuni termini non sono stati trovati</h2>
+      <p>{{ report.missing_terms | length }} voci del glossario non compaiono nei file elaborati.</p>
+    </section>
+  {% endif %}
+  {% if report.warnings %}
+    <section class="alert alert-warning report-alert">
+      <h2>Avvisi</h2>
+      <ul>
+        {% for item in report.warnings %}
+          <li>{{ item }}</li>
+        {% endfor %}
+      </ul>
+    </section>
+  {% endif %}
+  {% if report.errors %}
+    <section class="alert alert-error report-alert">
+      <h2>Errori</h2>
+      <ul>
+        {% for item in report.errors %}
+          <li>{{ item }}</li>
+        {% endfor %}
+      </ul>
+    </section>
+  {% endif %}
+
+  <section class="output-save-panel">
+    <div>
+      <h2>Salvataggio complessivo</h2>
+      <p class="muted">Questa azione applica la stessa scelta a tutti i file prodotti. Il report è opzionale e serve solo se vuoi conservare un riepilogo dell'elaborazione.</p>
+    </div>
+    <form method="post" action="{{ url_for('save_output', job_id=job_id) }}" class="save-all-form">
+      <fieldset class="save-mode-group">
+        <legend>Come salvare i file</legend>
+        <label>
+          <input type="radio" name="mode" value="linked" checked>
+          <span>Crea o aggiorna i file <code>.linked.tex</code></span>
+        </label>
+        <label>
+          <input type="radio" name="mode" value="overwrite">
+          <span>Sovrascrivi i sorgenti <code>.tex</code></span>
+        </label>
+      </fieldset>
+      <fieldset class="report-options">
+        <legend>Report opzionale</legend>
+        <label class="check">
+          <input type="checkbox" name="include_report" value="1">
+          Genera anche un report
+        </label>
+        <label>Formato report
+          <select name="report_format">
+            <option value="md">Markdown (.md)</option>
+            <option value="json">JSON (.json)</option>
+          </select>
+        </label>
+      </fieldset>
+      <button class="primary" type="submit">Salva tutti i file</button>
+    </form>
+  </section>
+
+  <div class="section-head output-list-head">
+    <div>
+      <h2>File prodotti</h2>
+      <p class="muted">Apri le azioni del singolo file solo quando vuoi salvare o compilare un documento specifico.</p>
+    </div>
   </div>
 
   <div class="output-list">
@@ -80,29 +169,7 @@
   </div>
 
   <div class="output-footer">
-    <form method="post" action="{{ url_for('save_output', job_id=job_id) }}" class="actions">
-      <input type="hidden" name="mode" value="linked">
-      <button name="report_format" value="md" type="submit">Salva tutti e report .md</button>
-      <button name="report_format" value="json" type="submit">Salva tutti e report .json</button>
-    </form>
     <a class="button-link primary-link" href="{{ url_for('operation') }}">Torna alla home</a>
   </div>
-
-  {% if report.missing_terms %}
-    <section class="report-section">
-      <h2>Termini non trovati</h2>
-      <p>{{ report.missing_terms | join(", ") }}</p>
-    </section>
-  {% endif %}
-  {% if report.warnings or report.errors %}
-    <section class="report-section">
-      <h2>Warning ed errori</h2>
-      <ul>
-        {% for item in report.warnings + report.errors %}
-          <li>{{ item }}</li>
-        {% endfor %}
-      </ul>
-    </section>
-  {% endif %}
 </section>
 {% endblock %}

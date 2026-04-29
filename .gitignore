@@ -222,3 +222,4 @@ glossary-linker.local.yml
 *.linked.tex
 reports/
 vendor/
+glossary-linker-report.*

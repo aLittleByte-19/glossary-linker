@@ -118,7 +118,10 @@ def process_files(
 
 
 def save_report_json(report: ProcessingReport, path: Path) -> None:
-    path.write_text(json.dumps(_jsonable(asdict(report)), indent=2, ensure_ascii=False), encoding="utf-8")
+    data = _jsonable(asdict(report))
+    data["missing_terms_count"] = len(report.missing_terms)
+    data.pop("missing_terms", None)
+    path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 def save_report_markdown(report: ProcessingReport, path: Path) -> None:
@@ -130,9 +133,7 @@ def save_report_markdown(report: ProcessingReport, path: Path) -> None:
         f"- Link automatici inseriti: {report.automatic_links}",
         f"- Link approvati manualmente: {report.manual_links}",
         f"- Occorrenze saltate: {report.skipped_occurrences}",
-        "",
-        "## Termini non trovati",
-        *[f"- {term}" for term in report.missing_terms],
+        f"- Termini non trovati: {len(report.missing_terms)}",
         "",
         "## Warning",
         *[f"- {warning}" for warning in report.warnings],
@@ -144,14 +145,21 @@ def save_report_markdown(report: ProcessingReport, path: Path) -> None:
 
 
 def ensure_glslink_macro(text: str, config: EditorialConfig) -> str:
+    macro = _glslink_macro(config)
+    existing_app_macro = re.compile(r"\\providecommand\{\\glslink\}\[2\]\{\\href\{.*?\}\{#2(?:\\textsuperscript\{\\scriptsize G\})?\}\}", re.DOTALL)
+    if existing_app_macro.search(text):
+        return existing_app_macro.sub(lambda _match: macro, text, count=1)
     if r"\newcommand{\glslink}" in text or r"\providecommand{\glslink}" in text:
         return text
-    target = _latex_href_target(config)
-    macro = rf"\providecommand{{\glslink}}[2]{{\href{{{target}}}{{#2}}}}"
     document_start = text.find(r"\begin{document}")
     if document_start >= 0:
         return text[:document_start].rstrip() + "\n\n" + macro + "\n\n" + text[document_start:]
     return macro + "\n\n" + text
+
+
+def _glslink_macro(config: EditorialConfig) -> str:
+    target = _latex_href_target(config)
+    return rf"\providecommand{{\glslink}}[2]{{\href{{{target}}}{{#2\textsuperscript{{\scriptsize G}}}}}}"
 
 
 def _latex_href_target(config: EditorialConfig) -> str:
@@ -159,7 +167,7 @@ def _latex_href_target(config: EditorialConfig) -> str:
     if "{id}" not in anchor:
         anchor = anchor.rstrip("#") + "{id}"
     url = (config.glossary_pdf_url or "").rstrip()
-    return (url + anchor.replace("{id}", "#1")).replace("#", r"\#")
+    return (url + anchor).replace("#", r"\#").replace("{id}", "#1")
 
 
 def _find_matches(text: str, entries: list[GlossaryEntry], config: EditorialConfig) -> list[dict]:

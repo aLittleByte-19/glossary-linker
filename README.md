@@ -20,6 +20,33 @@ Prima versione funzionale:
 
 ## Installazione locale
 
+Modo rapido su macOS/Linux:
+
+```bash
+scripts/install.sh
+```
+
+Modo rapido su Windows PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\install.ps1
+```
+
+Gli script creano `.venv`, installano l'app in modo editabile e preparano
+`glossary-linker.local.yml` se non esiste. Per installare anche pytest:
+
+```bash
+scripts/install.sh --dev
+```
+
+oppure:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\install.ps1 -Dev
+```
+
+Installazione manuale equivalente:
+
 ```bash
 python3 -m venv .venv
 . .venv/bin/activate
@@ -28,6 +55,20 @@ cp glossary-linker.local.example.yml glossary-linker.local.yml
 ```
 
 ## Avvio wizard
+
+Se hai usato lo script rapido:
+
+```bash
+.venv/bin/glossary-linker
+```
+
+su Windows:
+
+```powershell
+.\.venv\Scripts\glossary-linker.exe
+```
+
+Se invece hai attivato manualmente la virtualenv:
 
 ```bash
 glossary-linker

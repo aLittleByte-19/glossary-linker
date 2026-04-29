@@ -1,98 +1,238 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="panel">
+<section class="panel settings-panel">
   <div class="page-head">
     <div>
       <h1>Impostazioni</h1>
-      <p>Preferenze personali del computer locale, separate dalle regole editoriali condivise.</p>
+      <p>Qui trovi il setup del computer, le regole editoriali condivise e la verifica degli strumenti LaTeX. Le impostazioni personali restano nel file locale.</p>
+    </div>
+    <div class="page-actions">
+      <a class="button-link" href="{{ url_for('operation') }}">Torna alla home</a>
     </div>
   </div>
 
-  <nav class="tabs" aria-label="Schede impostazioni">
-    <a href="{{ url_for('settings') }}" class="{% if tab != 'check' %}active{% endif %}">Ambiente</a>
-    <a href="{{ url_for('settings', tab='check') }}" class="{% if tab == 'check' %}active{% endif %}">Verifica</a>
-  </nav>
+  <div class="guidance-strip">
+    <div>
+      <strong>Ambiente locale</strong>
+      <span>Path e preferenze specifiche del tuo computer.</span>
+    </div>
+    <div>
+      <strong>Regole editoriali</strong>
+      <span>Esclusioni condivise dal gruppo per evitare link fuori posto.</span>
+    </div>
+    <div>
+      <strong>Verifica</strong>
+      <span>Controlla se i binari LaTeX configurati sono raggiungibili.</span>
+    </div>
+  </div>
 
-  {% if tab == "check" %}
-    <section class="form-section">
-      <h2>Verifica Ambiente</h2>
-      <table>
-        <thead><tr><th>Strumento</th><th>Risultato</th></tr></thead>
-        <tbody>
-          {% for name, result in tools.items() %}
-            <tr><td>{{ name }}</td><td><code>{{ result }}</code></td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </section>
-  {% else %}
-    <form method="post" class="settings-form">
-      <div class="form-section">
-        <h2>Percorsi</h2>
-        <label>Root repo predefinita
-          <span class="field-with-action wide">
-            <input id="default_repo_root" name="default_repo_root" value="{{ local.default_repo_root }}">
-            <button type="button" data-picker data-kind="directory" data-target="#default_repo_root">Scegli</button>
-          </span>
-        </label>
-        <label>Cartella temporanea
-          <span class="field-with-action wide">
-            <input id="temporary_directory" name="temporary_directory" value="{{ local.temporary_directory }}">
-            <button type="button" data-picker data-kind="directory" data-target="#temporary_directory">Scegli</button>
-          </span>
-        </label>
+  <div class="settings-layout">
+    <aside class="settings-sidebar" aria-label="Sezioni impostazioni">
+      <label class="settings-search">
+        <span>Cerca impostazioni</span>
+        <input type="search" data-settings-search placeholder="Ambiente, regole, verifica...">
+      </label>
+      <div class="settings-nav-group">
+        <span>Generale</span>
+        <a href="{{ url_for('settings', tab='environment') }}" class="{% if tab == 'environment' %}active{% endif %}">Ambiente locale</a>
+        <a href="{{ url_for('settings', tab='rules') }}" class="{% if tab == 'rules' %}active{% endif %}">Regole editoriali</a>
+        <a href="{{ url_for('settings', tab='check') }}" class="{% if tab == 'check' %}active{% endif %}">Verifica ambiente</a>
       </div>
+      {% if tab == "environment" %}
+        <div class="settings-nav-group">
+          <span>Ambiente locale</span>
+          <a href="#paths">Percorsi</a>
+          <a href="#latex-tools">Strumenti LaTeX</a>
+          <a href="#compile-settings">Compilazione</a>
+          <a href="#local-behavior">Comportamento</a>
+        </div>
+      {% elif tab == "rules" %}
+        <div class="settings-nav-group">
+          <span>Regole editoriali</span>
+          <a href="#rule-sections">Sezioni ignorate</a>
+          <a href="#rule-files">File esclusi</a>
+          <a href="#rule-envs">Ambienti</a>
+          <a href="#rule-commands">Comandi</a>
+        </div>
+      {% endif %}
+    </aside>
 
-      <div class="form-section">
-        <h2>Strumenti LaTeX</h2>
-        {% for item in [
-          ("latexmk", "latexmk_path", local.latexmk_path),
-          ("pdflatex", "pdflatex_path", local.pdflatex_path),
-          ("xelatex", "xelatex_path", local.xelatex_path),
-          ("lualatex", "lualatex_path", local.lualatex_path)
-        ] %}
-          <label>{{ item[0] }}
-            <span class="field-with-action wide">
-              <input id="{{ item[1] }}" name="{{ item[1] }}" value="{{ item[2] }}">
-              <button type="button" data-picker data-kind="file" data-target="#{{ item[1] }}">Scegli</button>
-            </span>
-          </label>
-        {% endfor %}
-      </div>
+    <div class="settings-content">
+      {% if tab == "check" %}
+        <section class="form-section">
+          <div>
+            <h2>Verifica ambiente</h2>
+            <p class="muted">Controlla quali binari LaTeX sono raggiungibili con i path configurati. Se uno strumento risulta non trovato, scegli il binario corretto nella sezione Ambiente locale.</p>
+          </div>
+          <table>
+            <thead><tr><th>Strumento</th><th>Risultato</th></tr></thead>
+            <tbody>
+              {% for name, result in tools.items() %}
+                <tr><td>{{ name }}</td><td><code>{{ result }}</code></td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </section>
+      {% elif tab == "rules" %}
+        <form method="post" class="settings-form" data-wizard-form>
+          <input type="hidden" name="settings_scope" value="rules">
+          <section id="rule-sections" class="form-section rules-section">
+            <div>
+              <h2>Sezioni ignorate</h2>
+              <p class="muted">Queste opzioni evitano link in parti del documento dove i rimandi al glossario sono quasi sempre indesiderati.</p>
+            </div>
+            <div class="checks">
+              <label class="check"><input type="checkbox" name="ignored_sections" value="frontespizio" {% if "frontespizio" in config.ignored_sections %}checked{% endif %}> Salta frontespizio</label>
+              <label class="check"><input type="checkbox" name="ignored_sections" value="indice" {% if "indice" in config.ignored_sections %}checked{% endif %}> Salta indici</label>
+              <label class="check"><input type="checkbox" name="skip_titles" {% if "section" in config.ignored_commands %}checked{% endif %}> Salta titoli e didascalie</label>
+            </div>
+          </section>
 
-      <div class="form-section compact-grid">
-        <h2>Compilazione</h2>
-        <label>Compilatore preferito
-          <select name="preferred_compiler">
-            {% for compiler in ["latexmk", "pdflatex", "xelatex", "lualatex"] %}
-              <option value="{{ compiler }}" {% if local.preferred_compiler == compiler %}selected{% endif %}>{{ compiler }}</option>
+          <section id="rule-files" class="rule-editor" data-rule-editor data-target="#exclude_file_patterns" data-values='{{ config.exclude_file_patterns | tojson }}'>
+            <div>
+              <h2>Pattern file esclusi</h2>
+              <p class="muted">Usa glob relativi alla root del progetto per saltare build, bozze, prove e file già generati.</p>
+            </div>
+            <textarea id="exclude_file_patterns" name="exclude_file_patterns" hidden>{{ config.exclude_file_patterns | join('\n') }}</textarea>
+            <ol class="rule-list" data-rule-list></ol>
+            <div class="rule-controls">
+              <input data-rule-input placeholder="es. **/build/**">
+              <button type="button" data-rule-add>Aggiungi</button>
+              <button type="button" data-rule-edit>Modifica</button>
+              <button type="button" data-rule-delete>Elimina</button>
+            </div>
+          </section>
+
+          <section id="rule-envs" class="rule-editor" data-rule-editor data-target="#ignored_environments" data-values='{{ config.ignored_environments | tojson }}'>
+            <div>
+              <h2>Ambienti LaTeX ignorati</h2>
+              <p class="muted">Il contenuto di questi ambienti non viene analizzato. Inserisci ambienti come <code>verbatim</code>, <code>minted</code> o <code>lstlisting</code>.</p>
+            </div>
+            <textarea id="ignored_environments" name="ignored_environments" hidden>{{ config.ignored_environments | join('\n') }}</textarea>
+            <ol class="rule-list" data-rule-list></ol>
+            <div class="rule-controls">
+              <input data-rule-input placeholder="es. minted">
+              <button type="button" data-rule-add>Aggiungi</button>
+              <button type="button" data-rule-edit>Modifica</button>
+              <button type="button" data-rule-delete>Elimina</button>
+            </div>
+          </section>
+
+          <section id="rule-commands" class="rule-editor" data-rule-editor data-target="#ignored_commands" data-values='{{ config.ignored_commands | tojson }}'>
+            <div>
+              <h2>Comandi LaTeX ignorati</h2>
+              <p class="muted">Gli argomenti di questi comandi vengono trattati in modo conservativo, utile per link, URL, titoli e metadati.</p>
+            </div>
+            <textarea id="ignored_commands" name="ignored_commands" hidden>{{ config.ignored_commands | join('\n') }}</textarea>
+            <ol class="rule-list" data-rule-list></ol>
+            <div class="rule-controls">
+              <input data-rule-input placeholder="es. caption">
+              <button type="button" data-rule-add>Aggiungi</button>
+              <button type="button" data-rule-edit>Modifica</button>
+              <button type="button" data-rule-delete>Elimina</button>
+            </div>
+          </section>
+
+          <div class="actions"><button class="primary" type="submit">Salva regole</button></div>
+        </form>
+      {% else %}
+        <form method="post" class="settings-form">
+          <input type="hidden" name="settings_scope" value="environment">
+          <section id="paths" class="form-section">
+            <div>
+              <h2>Percorsi locali</h2>
+              <p class="muted">La root predefinita viene usata come punto di partenza quando scegli documenti e cartelle. Puoi comunque cambiarla durante il wizard.</p>
+            </div>
+            <label>Root repo predefinita
+              <span class="field-with-action wide">
+                <input id="default_repo_root" name="default_repo_root" value="{{ local.default_repo_root }}">
+                <button type="button" data-picker data-kind="directory" data-target="#default_repo_root">Scegli</button>
+              </span>
+            </label>
+            <label>Cartella temporanea
+              <span class="field-with-action wide">
+                <input id="temporary_directory" name="temporary_directory" value="{{ local.temporary_directory }}">
+                <button type="button" data-picker data-kind="directory" data-target="#temporary_directory">Scegli</button>
+              </span>
+            </label>
+          </section>
+
+          <section id="latex-tools" class="form-section">
+            <div>
+              <h2>Strumenti LaTeX</h2>
+              <p class="muted">Puoi scrivere solo il nome del comando se è nel PATH, oppure scegliere il binario esatto se usi una installazione personalizzata.</p>
+            </div>
+            {% for item in [
+              ("latexmk", "latexmk_path", local.latexmk_path),
+              ("pdflatex", "pdflatex_path", local.pdflatex_path),
+              ("xelatex", "xelatex_path", local.xelatex_path),
+              ("lualatex", "lualatex_path", local.lualatex_path)
+            ] %}
+              <label>{{ item[0] }}
+                <span class="field-with-action wide">
+                  <input id="{{ item[1] }}" name="{{ item[1] }}" value="{{ item[2] }}">
+                  <button type="button" data-picker data-kind="file" data-target="#{{ item[1] }}">Scegli</button>
+                </span>
+              </label>
             {% endfor %}
-          </select>
-        </label>
-        <label>Timeout compilazione
-          <input type="number" min="1" name="compile_timeout_seconds" value="{{ local.compile_timeout_seconds }}">
-        </label>
-        <label>Massimo passaggi
-          <input type="number" min="1" name="max_compile_passes" value="{{ local.max_compile_passes }}">
-        </label>
-        <label>Porta server locale
-          <input type="number" min="1" name="local_server_port" value="{{ local.local_server_port }}">
-        </label>
-        <label>Livello log
-          <input name="log_level" value="{{ local.log_level }}">
-        </label>
-        <label>Browser preferito
-          <input name="preferred_browser" value="{{ local.preferred_browser }}">
-        </label>
-      </div>
+          </section>
 
-      <div class="form-section checks">
-        <label class="check"><input type="checkbox" name="auto_open_pdf" {% if local.auto_open_pdf %}checked{% endif %}> Apri PDF dopo compilazione</label>
-        <label class="check"><input type="checkbox" name="clean_aux_files" {% if local.clean_aux_files %}checked{% endif %}> Pulisci file ausiliari</label>
-      </div>
+          <section id="compile-settings" class="form-section compact-grid">
+            <div>
+              <h2>Compilazione PDF</h2>
+              <p class="muted">Glossary Linker non installa TeX Live o MiKTeX: usa sempre gli strumenti locali configurati qui.</p>
+            </div>
+            <label>Compilatore preferito
+              <select name="preferred_compiler">
+                {% for compiler in ["latexmk", "pdflatex", "xelatex", "lualatex"] %}
+                  <option value="{{ compiler }}" {% if local.preferred_compiler == compiler %}selected{% endif %}>{{ compiler }}</option>
+                {% endfor %}
+              </select>
+            </label>
+            <label>Timeout compilazione
+              <input type="number" min="1" name="compile_timeout_seconds" value="{{ local.compile_timeout_seconds }}">
+            </label>
+            <label>Massimo passaggi
+              <input type="number" min="1" name="max_compile_passes" value="{{ local.max_compile_passes }}">
+            </label>
+            <label>Porta server locale
+              <input type="number" min="1" name="local_server_port" value="{{ local.local_server_port }}">
+            </label>
+            <label>Livello log
+              <input name="log_level" value="{{ local.log_level }}">
+            </label>
+            <label>Browser preferito
+              <input name="preferred_browser" value="{{ local.preferred_browser }}">
+            </label>
+          </section>
 
-      <div class="actions"><button class="primary" type="submit">Salva impostazioni</button></div>
-    </form>
-  {% endif %}
+          <section id="local-behavior" class="form-section checks">
+            <div>
+              <h2>Comportamento locale</h2>
+              <p class="muted">Queste preferenze riguardano solo il tuo computer e non finiscono nelle regole condivise.</p>
+            </div>
+            <label class="check"><input type="checkbox" name="auto_open_pdf" {% if local.auto_open_pdf %}checked{% endif %}> Apri PDF dopo compilazione</label>
+            <label class="check"><input type="checkbox" name="clean_aux_files" {% if local.clean_aux_files %}checked{% endif %}> Pulisci file ausiliari prima di compilare</label>
+          </section>
+
+          <div class="actions"><button class="primary" type="submit">Salva impostazioni</button></div>
+        </form>
+      {% endif %}
+
+      <div class="settings-footer-actions">
+        <a class="button-link" href="{{ url_for('operation') }}">Home</a>
+        {% if tab == "environment" %}
+          <a class="button-link" href="{{ url_for('settings', tab='rules') }}">Vai alle regole</a>
+          <a class="button-link" href="{{ url_for('settings', tab='check') }}">Verifica ambiente</a>
+        {% elif tab == "rules" %}
+          <a class="button-link" href="{{ url_for('settings', tab='environment') }}">Indietro</a>
+          <a class="button-link" href="{{ url_for('settings', tab='check') }}">Verifica ambiente</a>
+        {% else %}
+          <a class="button-link" href="{{ url_for('settings', tab='environment') }}">Ambiente locale</a>
+          <a class="button-link" href="{{ url_for('settings', tab='rules') }}">Regole editoriali</a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
 </section>
 {% endblock %}

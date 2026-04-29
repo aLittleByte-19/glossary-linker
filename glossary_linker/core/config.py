@@ -11,7 +11,9 @@ import yaml
 class EditorialConfig:
     glossary_pdf_url: str = ""
     glossary_path: str = "Glossario.tex"
-    anchor_format: str = "#gls:{id}"
+    anchor_format: str = "#nameddest=gls:{id}"
+    glossary_detection: str = "auto"
+    excluded_entry_ids: list[str] = field(default_factory=list)
     exclude_file_patterns: list[str] = field(default_factory=lambda: [
         "*.linked.tex",
         "**/build/**",

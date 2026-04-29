@@ -1,8 +1,9 @@
+import json
 from pathlib import Path
 
 from glossary_linker.core.config import EditorialConfig
-from glossary_linker.core.linker import collect_manual_occurrences, link_file
-from glossary_linker.core.models import GlossaryEntry
+from glossary_linker.core.linker import collect_manual_occurrences, link_file, save_report_json, save_report_markdown
+from glossary_linker.core.models import GlossaryEntry, ProcessingReport
 
 
 def test_link_file_links_automatic_terms_and_inserts_macro(tmp_path: Path):
@@ -22,7 +23,30 @@ Accuratezza e accuratezza.
 
     assert result.automatic_links == 2
     assert r"\providecommand{\glslink}" in result.linked_text
+    assert r"https://example.test/Glossario.pdf\#nameddest=gls:#1" in result.linked_text
+    assert r"#2\textsuperscript{\scriptsize G}" in result.linked_text
     assert result.linked_text.count(r"\glslink{accuratezza}") == 2
+
+
+def test_link_file_updates_previous_app_managed_macro(tmp_path: Path):
+    tex = tmp_path / "doc.tex"
+    tex.write_text(
+        r"""\documentclass{article}
+\providecommand{\glslink}[2]{\href{https://old.test/Glossario.pdf\#nameddest=gls:#1}{#2}}
+\begin{document}
+Accuratezza.
+\end{document}
+""",
+        encoding="utf-8",
+    )
+    config = EditorialConfig(glossary_pdf_url="https://example.test/Glossario.pdf")
+    entries = [GlossaryEntry("accuratezza", "Accuratezza")]
+
+    result = link_file(tex, entries, config)
+
+    assert result.linked_text.count(r"\providecommand{\glslink}") == 1
+    assert r"https://example.test/Glossario.pdf\#nameddest=gls:#1" in result.linked_text
+    assert r"#2\textsuperscript{\scriptsize G}" in result.linked_text
 
 
 def test_link_file_ignores_existing_links_and_verbatim(tmp_path: Path):
@@ -151,3 +175,20 @@ Accuratezza nel corpo.
     assert r"\glslink{accuratezza}{Accuratezza} in frontespizio" not in result.linked_text
     assert r"\chapter{\glslink{accuratezza}{Accuratezza} nel capitolo}" not in result.linked_text
     assert r"\glslink{accuratezza}{Accuratezza} nel corpo" in result.linked_text
+
+
+def test_saved_reports_do_not_list_missing_term_names(tmp_path: Path):
+    report = ProcessingReport(missing_terms=["Termine Assente", "Altro Termine"])
+    markdown_path = tmp_path / "report.md"
+    json_path = tmp_path / "report.json"
+
+    save_report_markdown(report, markdown_path)
+    save_report_json(report, json_path)
+
+    markdown = markdown_path.read_text(encoding="utf-8")
+    data = json.loads(json_path.read_text(encoding="utf-8"))
+
+    assert "Termini non trovati: 2" in markdown
+    assert "Termine Assente" not in markdown
+    assert "missing_terms" not in data
+    assert data["missing_terms_count"] == 2

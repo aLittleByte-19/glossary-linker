@@ -4,9 +4,27 @@
   <div class="page-head">
     <div>
       <h1>Glossario Rilevato</h1>
-      <p>Consulta le voci salvate in <code>{{ entries_path.name }}</code> e scegli quali termini richiedono revisione manuale.</p>
+      <p>Consulta le voci salvate in <code>{{ entries_path.name }}</code>, correggi alias e scegli quali termini richiedono revisione manuale.</p>
     </div>
-    <a class="button-link" href="{{ url_for('glossary_rules') }}">Torna al wizard</a>
+    <div class="page-actions">
+      <a class="button-link" href="{{ url_for('operation') }}">Home</a>
+      <a class="button-link" href="{{ url_for('glossary_rules') }}">Torna al wizard</a>
+    </div>
+  </div>
+
+  <div class="guidance-strip">
+    <div>
+      <strong>Automatico</strong>
+      <span>Adatto a termini tecnici chiari e poco ambigui.</span>
+    </div>
+    <div>
+      <strong>Manuale</strong>
+      <span>Consigliato per parole brevi, comuni o dipendenti dal contesto.</span>
+    </div>
+    <div>
+      <strong>Alias</strong>
+      <span>Inserisci varianti separate da virgola, senza duplicare il termine principale.</span>
+    </div>
   </div>
 
   <form method="post" class="stack" data-entries-form>
@@ -80,6 +98,7 @@
     </section>
 
     <div class="actions">
+      <a class="button-link" href="{{ url_for('glossary_rules') }}">Indietro</a>
       <button class="primary" type="submit">Salva glossario rilevato</button>
     </div>
   </form>

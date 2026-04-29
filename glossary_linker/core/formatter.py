@@ -29,7 +29,7 @@ def _replace_subsections_with_entries(text: str) -> str:
         if "\\glossaryentry" in between:
             continue
         term = strip_latex(parsed[0])
-        if not term:
+        if not term or re.fullmatch(r"#\d+", term.strip()):
             continue
         parts.append(text[cursor:match.start()])
         parts.append(rf"\glossaryentry{{{slugify(term)}}}{{{parsed[0].strip()}}}")

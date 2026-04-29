@@ -17,17 +17,23 @@ SUBSECTION_RE = re.compile(r"\\subsection\*?\s*")
 
 
 def parse_glossary_text(text: str, config: EditorialConfig | None = None) -> list[GlossaryEntry]:
-    entries: list[GlossaryEntry] = []
-    entries.extend(_parse_structured_entries(text))
+    mode = (config.glossary_detection if config else "auto") or "auto"
+    source = _document_body(_strip_glossary_command_definitions(text))
+    structured = _parse_structured_entries(source)
 
-    structured_spans = _structured_spans(text)
-    for entry in _parse_subsection_entries(text):
-        if any(start <= entry_start < end for start, end, entry_start in structured_spans):
-            continue
-        if entry.id not in {existing.id for existing in entries}:
-            entries.append(entry)
+    if mode == "structured":
+        entries = structured
+    elif mode == "subsection":
+        entries = _parse_subsection_entries(source)
+    else:
+        entries = structured if structured else _parse_subsection_entries(source)
 
-    return merge_config(entries, config) if config else entries
+    entries = _deduplicate_entries(entries)
+    if config:
+        excluded = set(config.excluded_entry_ids)
+        entries = [entry for entry in entries if entry.id not in excluded]
+        return merge_config(entries, config)
+    return entries
 
 
 def parse_glossary_file(path: Path, config: EditorialConfig | None = None) -> list[GlossaryEntry]:
@@ -103,8 +109,6 @@ def merge_detected_with_store(detected: list[GlossaryEntry], stored: list[Glossa
         else:
             new_count += 1
             merged.append(entry)
-    detected_ids = {entry.id for entry in detected}
-    merged.extend(entry for entry in stored if entry.id not in detected_ids)
     return merged, new_count
 
 
@@ -118,13 +122,17 @@ def _parse_structured_entries(text: str) -> list[GlossaryEntry]:
         parsed_term = parse_braced_argument(text, parsed_id[1])
         if not parsed_term:
             continue
-        matches.append((match.start(), parsed_term[1], parsed_id[0].strip(), strip_latex(parsed_term[0])))
+        entry_id = slugify(parsed_id[0].strip())
+        term = strip_latex(parsed_term[0])
+        if not entry_id or not _valid_detected_term(term):
+            continue
+        matches.append((match.start(), parsed_term[1], entry_id, term))
 
     entries: list[GlossaryEntry] = []
     for index, (start, end, entry_id, term) in enumerate(matches):
         next_start = matches[index + 1][0] if index + 1 < len(matches) else len(text)
         definition = _definition_after(text[end:next_start])
-        entries.append(GlossaryEntry(id=slugify(entry_id), term=term, definition=definition, aliases=_suggest_aliases(term)))
+        entries.append(GlossaryEntry(id=entry_id, term=term, definition=definition, aliases=_suggest_aliases(term)))
     return entries
 
 
@@ -136,7 +144,7 @@ def _parse_subsection_entries(text: str) -> list[GlossaryEntry]:
         if not parsed:
             continue
         term = strip_latex(parsed[0])
-        if term:
+        if _valid_detected_term(term):
             matches.append((match.start(), parsed[1], term))
 
     entries: list[GlossaryEntry] = []
@@ -159,17 +167,74 @@ def _definition_after(block: str) -> str:
     return " ".join(lines)[:320]
 
 
-def _structured_spans(text: str) -> list[tuple[int, int, int]]:
-    spans: list[tuple[int, int, int]] = []
-    for match in STRUCTURED_RE.finditer(text):
-        first = text.find("{", match.end())
-        parsed_id = parse_braced_argument(text, first)
-        if not parsed_id:
+def _document_body(text: str) -> str:
+    start = text.find(r"\begin{document}")
+    if start < 0:
+        return text
+    start += len(r"\begin{document}")
+    end = text.find(r"\end{document}", start)
+    return text[start:end] if end >= 0 else text[start:]
+
+
+def _strip_glossary_command_definitions(text: str) -> str:
+    patterns = [
+        (re.compile(r"\\(?:providecommand|newcommand|renewcommand)\s*\{\\glossaryentry\}"), 1),
+        (re.compile(r"\\NewDocumentCommand\s*\{\\glossaryentry\}"), 2),
+    ]
+    ranges: list[tuple[int, int]] = []
+    for pattern, braced_arguments in patterns:
+        for match in pattern.finditer(text):
+            end = _command_definition_end(text, match.end(), braced_arguments)
+            ranges.append((match.start(), end))
+    if not ranges:
+        return text
+    cleaned = list(text)
+    for start, end in ranges:
+        cleaned[start:end] = " " * (end - start)
+    return "".join(cleaned)
+
+
+def _command_definition_end(text: str, index: int, braced_arguments: int) -> int:
+    cursor = index
+    while cursor < len(text) and text[cursor].isspace():
+        cursor += 1
+    while cursor < len(text) and text[cursor] == "[":
+        close = text.find("]", cursor + 1)
+        if close < 0:
+            return cursor
+        cursor = close + 1
+        while cursor < len(text) and text[cursor].isspace():
+            cursor += 1
+    for _ in range(braced_arguments):
+        parsed = parse_braced_argument(text, cursor)
+        if not parsed:
+            return cursor
+        cursor = parsed[1]
+        while cursor < len(text) and text[cursor].isspace():
+            cursor += 1
+    return cursor
+
+
+def _valid_detected_term(term: str) -> bool:
+    normalized = re.sub(r"\s+", " ", term).strip()
+    if not normalized or len(normalized) > 120:
+        return False
+    if re.fullmatch(r"#\d+", normalized):
+        return False
+    if "\\" in normalized or "{" in normalized or "}" in normalized:
+        return False
+    return bool(re.search(r"[A-Za-zÀ-ÖØ-öø-ÿ]", normalized))
+
+
+def _deduplicate_entries(entries: list[GlossaryEntry]) -> list[GlossaryEntry]:
+    result: list[GlossaryEntry] = []
+    seen: set[str] = set()
+    for entry in entries:
+        if entry.id in seen:
             continue
-        parsed_term = parse_braced_argument(text, parsed_id[1])
-        if parsed_term:
-            spans.append((match.start(), parsed_term[1], match.start()))
-    return spans
+        seen.add(entry.id)
+        result.append(entry)
+    return result
 
 
 def _suggest_aliases(term: str) -> list[str]:

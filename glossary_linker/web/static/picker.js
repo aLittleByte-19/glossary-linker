@@ -40,11 +40,34 @@ async function pickPath(button) {
       target.dispatchEvent(new Event("input", { bubbles: true }));
     }
   } catch (error) {
-    window.alert(error.message);
+    showAppAlert(error.message, "error");
   } finally {
     button.disabled = false;
     button.textContent = originalText;
   }
+}
+
+function showAppAlert(message, type = "info") {
+  const shell = document.querySelector(".shell");
+  if (!shell) return;
+  let container = shell.querySelector(".alerts");
+  if (!container) {
+    container = document.createElement("section");
+    container.className = "alerts";
+    container.setAttribute("aria-live", "polite");
+    const progress = shell.querySelector(".workflow-progress");
+    if (progress) {
+      progress.insertAdjacentElement("afterend", container);
+    } else {
+      shell.prepend(container);
+    }
+  }
+  const alert = document.createElement("div");
+  alert.className = `alert alert-${type}`;
+  const paragraph = document.createElement("p");
+  paragraph.textContent = message;
+  alert.appendChild(paragraph);
+  container.appendChild(alert);
 }
 
 async function refreshGlossaryEntries({ forced = false } = {}) {
@@ -57,6 +80,8 @@ async function refreshGlossaryEntries({ forced = false } = {}) {
     glossary_pdf_url: document.querySelector("#glossary_pdf_url")?.value || "",
     anchor_format: document.querySelector("#anchor_format")?.value || ""
   };
+  const detection = document.querySelector('input[name="glossary_detection"]:checked');
+  if (detection) payload.glossary_detection = detection.value;
 
   try {
     const response = await fetch("/glossary-preview", {
@@ -68,10 +93,11 @@ async function refreshGlossaryEntries({ forced = false } = {}) {
     if (!data.ok) throw new Error(data.error || "Impossibile leggere il glossario.");
     if (status) {
       const stats = data.stats || {};
-      status.textContent = `${stats.total || 0} termini rilevati, ${stats.manual || 0} in revisione manuale, ${stats.new || 0} nuovi termini.`;
+      status.textContent = `${stats.total || 0} termini rilevati, ${stats.manual || 0} in revisione manuale, ${stats.new || 0} nuovi termini. Apri il glossario per confermare la lista.`;
     }
   } catch (error) {
     if (status) status.textContent = error.message;
+    showAppAlert(error.message, "error");
   }
 }
 
@@ -107,6 +133,7 @@ async function discoverTexFiles(button) {
     }
   } catch (error) {
     if (status) status.textContent = error.message;
+    showAppAlert(error.message, "error");
   } finally {
     button.disabled = false;
     button.textContent = originalText;
@@ -116,22 +143,25 @@ async function discoverTexFiles(button) {
 async function saveWizardState() {
   const form = document.querySelector("[data-wizard-form]");
   if (!form) return;
-  const checkedSections = [...form.querySelectorAll('input[name="ignored_sections"]:checked')].map((item) => item.value);
   const payload = {
     operation: document.querySelector('input[name="operation"]:checked')?.value || "",
     repo_root: document.querySelector("#repo_root")?.value || "",
     glossary_path: document.querySelector("#glossary_path")?.value || "",
     glossary_pdf_url: document.querySelector("#glossary_pdf_url")?.value || "",
     anchor_format: document.querySelector("#anchor_format")?.value || "",
-    exclude_file_patterns: document.querySelector("#exclude_file_patterns")?.value || "",
-    ignored_environments: document.querySelector("#ignored_environments")?.value || "",
-    ignored_commands: document.querySelector("#ignored_commands")?.value || "",
-    ignored_sections: checkedSections,
-    skip_titles: Boolean(form.querySelector('input[name="skip_titles"]')?.checked),
     source_dir: document.querySelector("#source_dir")?.value || ".",
     review_order: form.querySelector('input[name="review_order"]:checked')?.value || "by_term",
     new_entry_ids: form.querySelector('input[name="new_entry_ids"]')?.value || ""
   };
+  const detection = document.querySelector('input[name="glossary_detection"]:checked');
+  if (detection) payload.glossary_detection = detection.value;
+  if (form.querySelector("[data-rule-editor]")) {
+    payload.exclude_file_patterns = document.querySelector("#exclude_file_patterns")?.value || "";
+    payload.ignored_environments = document.querySelector("#ignored_environments")?.value || "";
+    payload.ignored_commands = document.querySelector("#ignored_commands")?.value || "";
+    payload.ignored_sections = [...form.querySelectorAll('input[name="ignored_sections"]:checked')].map((item) => item.value);
+    payload.skip_titles = Boolean(form.querySelector('input[name="skip_titles"]')?.checked);
+  }
   try {
     await fetch("/wizard-state", {
       method: "POST",
@@ -238,7 +268,10 @@ function renderEntries(entries, previousState = new Map()) {
     hidden.type = "hidden";
     hidden.name = "entry_id";
     hidden.value = entry.id;
-    idCell.append(code, hidden);
+    const idContent = document.createElement("div");
+    idContent.className = "entry-term-cell";
+    idContent.append(code, hidden);
+    idCell.appendChild(idContent);
 
     const termCell = document.createElement("td");
     termCell.textContent = entry.term;
@@ -256,16 +289,20 @@ function renderEntries(entries, previousState = new Map()) {
     aliasCell.appendChild(aliasInput);
 
     const modeCell = document.createElement("td");
+    modeCell.className = "mode-cell";
     const label = document.createElement("label");
-    label.className = "switch";
+    label.className = "switch icon-only";
+    label.title = `Modalità per ${entry.term}`;
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
     checkbox.name = `mode_${entry.id}`;
     checkbox.value = "manual";
     checkbox.checked = manual;
     checkbox.dataset.modeSwitch = "";
+    checkbox.setAttribute("aria-label", `Modalità per ${entry.term}`);
     const visual = document.createElement("span");
     const text = document.createElement("em");
+    text.className = "sr-only";
     text.dataset.modeLabel = "";
     label.append(checkbox, visual, text);
     modeCell.appendChild(label);
@@ -277,13 +314,21 @@ function renderEntries(entries, previousState = new Map()) {
 }
 
 function updateModeLabel(input) {
-  const label = input.closest(".switch")?.querySelector("[data-mode-label]");
-  if (label) label.textContent = input.checked ? "Manuale" : "Automatico";
+  const wrapper = input.closest(".switch");
+  const label = wrapper?.querySelector("[data-mode-label]");
+  const value = input.checked ? "Manuale" : "Automatico";
+  if (label) label.textContent = value;
+  if (wrapper) wrapper.dataset.mode = value.toLowerCase();
 }
 
 const entryTables = {
   manual: { page: 0, query: "" },
   automatic: { page: 0, query: "" }
+};
+
+const formatEntries = {
+  page: 0,
+  query: ""
 };
 
 function initEntryTables() {
@@ -292,6 +337,13 @@ function initEntryTables() {
   updateEntryCounts();
   updateEntryPagination("manual");
   updateEntryPagination("automatic");
+}
+
+function initFormatEntries() {
+  if (!document.querySelector("[data-format-table]")) return;
+  sortFormatEntries();
+  updateFormatEntryCounts();
+  updateFormatPagination();
 }
 
 function sortEntryTables() {
@@ -336,6 +388,43 @@ function updateEntryPagination(kind) {
   if (next) next.disabled = state.page >= pages - 1;
 }
 
+function sortFormatEntries() {
+  const table = document.querySelector("[data-format-table]");
+  if (!table) return;
+  [...table.querySelectorAll("[data-format-entry]")]
+    .sort((a, b) => (a.dataset.entryTerm || "").localeCompare(b.dataset.entryTerm || "", "it"))
+    .forEach((row) => table.appendChild(row));
+}
+
+function updateFormatEntryCounts() {
+  const count = document.querySelector("[data-format-included-count]");
+  if (!count) return;
+  const included = document.querySelectorAll("[data-format-include]:checked").length;
+  count.textContent = String(included);
+}
+
+function updateFormatPagination() {
+  const table = document.querySelector("[data-format-table]");
+  if (!table) return;
+  const rows = [...table.querySelectorAll("[data-format-entry]")];
+  const query = formatEntries.query.trim().toLowerCase();
+  const filtered = rows.filter((row) => row.textContent.toLowerCase().includes(query));
+  const pageSize = 10;
+  const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  formatEntries.page = Math.min(formatEntries.page, pages - 1);
+  const start = formatEntries.page * pageSize;
+  const visible = new Set(filtered.slice(start, start + pageSize));
+  rows.forEach((row) => {
+    row.hidden = !visible.has(row);
+  });
+  const label = document.querySelector("[data-format-page-label]");
+  const prev = document.querySelector("[data-format-prev]");
+  const next = document.querySelector("[data-format-next]");
+  if (label) label.textContent = `${formatEntries.page + 1} / ${pages} (${filtered.length})`;
+  if (prev) prev.disabled = formatEntries.page === 0;
+  if (next) next.disabled = formatEntries.page >= pages - 1;
+}
+
 function moveEntryRow(input) {
   const row = input.closest("[data-entry]");
   if (!row) return;
@@ -366,6 +455,24 @@ function initRuleEditors() {
     const values = parseRuleValues(editor);
     editor.dataset.selectedIndex = "";
     renderRuleEditor(editor, values);
+  });
+}
+
+function initSettingsSearch() {
+  const search = document.querySelector("[data-settings-search]");
+  const sidebar = document.querySelector(".settings-sidebar");
+  if (!search || !sidebar) return;
+  search.addEventListener("input", () => {
+    const query = search.value.trim().toLowerCase();
+    sidebar.querySelectorAll(".settings-nav-group").forEach((group) => {
+      let visibleLinks = 0;
+      group.querySelectorAll("a").forEach((link) => {
+        const isVisible = !query || link.textContent.toLowerCase().includes(query);
+        link.hidden = !isVisible;
+        if (isVisible) visibleLinks += 1;
+      });
+      group.hidden = visibleLinks === 0;
+    });
   });
 }
 
@@ -496,7 +603,7 @@ document.addEventListener("click", (event) => {
     const value = source.value.trim();
     if (!value) return;
     if (value.startsWith("/") || value.startsWith("..")) {
-      window.alert("Inserisci un path relativo alla root progetto.");
+      showAppAlert("Inserisci un path relativo alla root progetto.", "warning");
       return;
     }
     setFileValues(target, [value], addButton.dataset.fileList);
@@ -521,12 +628,14 @@ document.addEventListener("click", (event) => {
 
 document.addEventListener("DOMContentLoaded", () => {
   initRuleEditors();
+  initSettingsSearch();
   document.querySelectorAll("[data-file-list]").forEach((button) => {
     const target = document.querySelector(button.dataset.target);
     if (target) renderFileList(target, button.dataset.fileList);
   });
   document.querySelectorAll("[data-mode-switch]").forEach(updateModeLabel);
   initEntryTables();
+  initFormatEntries();
   const debouncedRefresh = debounce(() => refreshGlossaryEntries());
   const debouncedSave = debounce(() => saveWizardState(), 500);
   document.querySelectorAll("[data-glossary-source]").forEach((input) => {
@@ -548,9 +657,23 @@ document.addEventListener("change", (event) => {
       updateModeLabel(modeSwitch);
     }
   }
+
+  const includeEntry = event.target.closest('[name="include_entry_id"]');
+  if (includeEntry) {
+    includeEntry.closest("[data-entry]")?.classList.toggle("is-excluded", !includeEntry.checked);
+    updateFormatEntryCounts();
+  }
 });
 
 document.addEventListener("input", (event) => {
+  const formatSearch = event.target.closest("[data-format-search]");
+  if (formatSearch) {
+    formatEntries.query = formatSearch.value || "";
+    formatEntries.page = 0;
+    updateFormatPagination();
+    return;
+  }
+
   const search = event.target.closest("[data-entry-search]");
   if (!search) return;
   const kind = search.dataset.entrySearch;
@@ -560,6 +683,17 @@ document.addEventListener("input", (event) => {
 });
 
 document.addEventListener("click", (event) => {
+  const formatPrev = event.target.closest("[data-format-prev]");
+  if (formatPrev) {
+    formatEntries.page = Math.max(0, formatEntries.page - 1);
+    updateFormatPagination();
+  }
+  const formatNext = event.target.closest("[data-format-next]");
+  if (formatNext) {
+    formatEntries.page += 1;
+    updateFormatPagination();
+  }
+
   const prev = event.target.closest("[data-page-prev]");
   if (prev) {
     const kind = prev.dataset.pagePrev;

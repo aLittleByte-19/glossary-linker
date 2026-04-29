@@ -12,14 +12,35 @@
   <div class="page-head">
     <div>
       <h1>Glossario e Regole</h1>
-      <p>Imposta da dove leggere glossario e documenti. Le scelte di questa pagina vengono salvate, tranne la lista dei file selezionati per una singola elaborazione.</p>
+      <p>Configura le sorgenti, scegli i documenti e conferma il glossario rilevato prima di iniziare l'elaborazione.</p>
+    </div>
+    <div class="page-actions">
+      <a class="button-link" href="{{ url_for('operation') }}">Indietro</a>
+      <a class="button-link" href="{{ url_for('settings', tab='rules') }}">Regole</a>
     </div>
   </div>
+
+  <div class="guidance-strip">
+    <div>
+      <strong>Flusso selezionato</strong>
+      <span>{% if operation == "link-documents" %}Linka documenti{% else %}Aggiorna per nuove voci glossario{% endif %}</span>
+    </div>
+    <div>
+      <strong>Salvataggio</strong>
+      <span>Nessun sorgente viene modificato prima della schermata Output.</span>
+    </div>
+    <div>
+      <strong>Modalità termini</strong>
+      <span>Automatico linka tutto, Manuale apre la revisione occorrenza per occorrenza.</span>
+    </div>
+  </div>
+
   <form method="post" enctype="multipart/form-data" class="stack" data-wizard-form>
-    <div class="form-section path-stack">
+    <div class="form-section path-stack guided-block">
       <div>
+        <p class="section-kicker">Passo 1</p>
         <h2>Sorgenti</h2>
-        <p class="muted">La root progetto serve per mostrare path relativi e per scansionare i documenti. Il glossario puo essere un path locale o un URL.</p>
+        <p class="muted">La root progetto serve per mostrare path relativi e per scansionare i documenti. Il glossario puo essere un path locale o un URL; l'URL del PDF è quello che finirà nei link.</p>
       </div>
       <label>Root progetto
         <span class="field-with-action wide">
@@ -41,67 +62,11 @@
       </label>
     </div>
 
-    <section class="form-section rules-section">
-      <div>
-        <h2>Regole di esclusione</h2>
-        <p class="muted">Queste regole dicono al linker dove non deve intervenire. Sono conservative: meglio saltare un caso dubbio che inserire un link nel posto sbagliato.</p>
-      </div>
-      <div class="checks">
-        <label class="check"><input type="checkbox" name="ignored_sections" value="frontespizio" {% if "frontespizio" in config.ignored_sections %}checked{% endif %} data-persist> Salta frontespizio</label>
-        <label class="check"><input type="checkbox" name="ignored_sections" value="indice" {% if "indice" in config.ignored_sections %}checked{% endif %} data-persist> Salta indici</label>
-        <label class="check"><input type="checkbox" name="skip_titles" {% if "section" in config.ignored_commands %}checked{% endif %} data-persist> Salta titoli e didascalie</label>
-      </div>
-
-      <div class="rule-editor" data-rule-editor data-target="#exclude_file_patterns" data-values='{{ config.exclude_file_patterns | tojson }}'>
-        <div>
-          <h3>Pattern file esclusi</h3>
-          <p class="muted">Percorsi o glob da ignorare durante la scansione dei documenti.</p>
-        </div>
-        <textarea id="exclude_file_patterns" name="exclude_file_patterns" hidden data-persist>{{ config.exclude_file_patterns | join('\n') }}</textarea>
-        <ol class="rule-list" data-rule-list></ol>
-        <div class="rule-controls">
-          <input data-rule-input placeholder="es. **/build/**">
-          <button type="button" data-rule-add>Aggiungi</button>
-          <button type="button" data-rule-edit>Modifica</button>
-          <button type="button" data-rule-delete>Elimina</button>
-        </div>
-      </div>
-
-      <div class="rule-editor" data-rule-editor data-target="#ignored_environments" data-values='{{ config.ignored_environments | tojson }}'>
-        <div>
-          <h3>Ambienti LaTeX ignorati</h3>
-          <p class="muted">Il contenuto di questi ambienti non viene analizzato.</p>
-        </div>
-        <textarea id="ignored_environments" name="ignored_environments" hidden data-persist>{{ config.ignored_environments | join('\n') }}</textarea>
-        <ol class="rule-list" data-rule-list></ol>
-        <div class="rule-controls">
-          <input data-rule-input placeholder="es. minted">
-          <button type="button" data-rule-add>Aggiungi</button>
-          <button type="button" data-rule-edit>Modifica</button>
-          <button type="button" data-rule-delete>Elimina</button>
-        </div>
-      </div>
-
-      <div class="rule-editor" data-rule-editor data-target="#ignored_commands" data-values='{{ config.ignored_commands | tojson }}'>
-        <div>
-          <h3>Comandi LaTeX ignorati</h3>
-          <p class="muted">Gli argomenti di questi comandi vengono trattati in modo conservativo.</p>
-        </div>
-        <textarea id="ignored_commands" name="ignored_commands" hidden data-persist>{{ config.ignored_commands | join('\n') }}</textarea>
-        <ol class="rule-list" data-rule-list></ol>
-        <div class="rule-controls">
-          <input data-rule-input placeholder="es. caption">
-          <button type="button" data-rule-add>Aggiungi</button>
-          <button type="button" data-rule-edit>Modifica</button>
-          <button type="button" data-rule-delete>Elimina</button>
-        </div>
-      </div>
-    </section>
-
     {% if operation == "link-documents" %}
-      <section class="input-group">
+      <section class="input-group guided-block">
         <div class="section-head">
           <div>
+            <p class="section-kicker">Passo 2</p>
             <h2>Documenti da linkare</h2>
             <p class="muted">Seleziona singoli file oppure fai rilevare i <code>.tex</code>. I file dentro la root sono mostrati come path relativi; quelli fuori root restano assoluti.</p>
           </div>
@@ -144,7 +109,8 @@
         </fieldset>
       </section>
     {% else %}
-      <section class="input-group">
+      <section class="input-group guided-block">
+        <p class="section-kicker">Passo 2</p>
         <h2>Nuove voci</h2>
         <p class="muted">Inserisci gli ID delle voci appena aggiunte al glossario. Se lasci vuoto, l'app usa tutte le voci disponibili.</p>
         <label>ID delle nuove voci, separati da virgola
@@ -153,11 +119,12 @@
       </section>
     {% endif %}
 
-    <section class="form-section">
+    <section class="form-section guided-block">
       <div>
         <div>
+          <p class="section-kicker">Passo 3</p>
           <h2>Glossario rilevato</h2>
-          <p class="muted">Le voci sono salvate in <code>{{ entries_path.name }}</code>. Apri la finestra dedicata per consultarle e modificare Automatico/Manuale.</p>
+          <p class="muted">Le voci sono salvate in <code>{{ entries_path.name }}</code>. Da qui puoi solo consultare la lista usata per il linking e modificare Automatico/Manuale.</p>
         </div>
       </div>
       <div class="stats compact-stats">
@@ -167,13 +134,17 @@
       </div>
       <div class="actions glossary-actions">
         <button type="button" data-refresh-glossary>Aggiorna voci</button>
-        <a class="button-link" href="{{ url_for('entries') }}" target="_blank" rel="noopener">Apri glossario</a>
+        <a class="button-link" href="{{ url_for('entries') }}">Consulta glossario</a>
       </div>
       <p id="glossary_preview_status" class="status-line" aria-live="polite"></p>
     </section>
 
-    <div class="actions">
-      <button class="primary" name="action" value="continue" type="submit">Avvia elaborazione</button>
+    <div class="flow-actions flow-actions-between">
+      <a class="button-link" href="{{ url_for('operation') }}">Torna alla home</a>
+      <div class="actions">
+        <a class="button-link" href="{{ url_for('settings', tab='rules') }}">Controlla regole</a>
+        <button class="primary" name="action" value="continue" type="submit">Avvia elaborazione</button>
+      </div>
     </div>
   </form>
 </section>
