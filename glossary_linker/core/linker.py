@@ -109,7 +109,7 @@ def process_files(
             report.manual_links += result.manual_links
             report.skipped_occurrences += result.skipped
             for entry in entries:
-                if entry.term in result.linked_text:
+                if rf"\glslink{{{entry.id}}}" in result.linked_text:
                     found_terms.add(entry.id)
         except Exception as exc:  # pragma: no cover - reported to UI
             report.errors.append(f"{path}: {exc}")
