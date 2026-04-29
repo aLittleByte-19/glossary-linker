@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "glossary-linker"
+version = "0.1.0"
+description = "Local wizard to link LaTeX documents to a published glossary PDF."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+dependencies = [
+  "Flask>=3.0",
+  "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+]
+
+[project.scripts]
+glossary-linker = "glossary_linker.web.app:main"
+glossary-linker-cli = "glossary_linker.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.setuptools.packages.find]
+include = ["glossary_linker*"]
+exclude = ["vendor*", "reports*", "tests*", "examples*"]

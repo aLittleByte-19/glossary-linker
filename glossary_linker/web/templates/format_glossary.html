@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+{% block progress %}
+<nav class="workflow-progress" aria-label="Avanzamento formattazione glossario">
+  <a href="{{ url_for('operation') }}">Operazione</a>
+  <a class="active" href="#format-input">Input</a>
+  <a href="#format-detection">Rilevamento</a>
+  {% if formatted_text %}
+    <a href="#format-review">Revisione</a>
+    <a href="#format-output">Output</a>
+  {% else %}
+    <span class="disabled">Revisione</span>
+    <span class="disabled">Output</span>
+  {% endif %}
+</nav>
+{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="page-head">
+    <div>
+      <h1>Formatta Glossario .tex</h1>
+      <p>Prepara un glossario LaTeX con ID stabili e voci confermate. Il file sorgente viene sovrascritto solo se lo scegli nella fase finale.</p>
+    </div>
+    <div class="page-actions">
+      <a class="button-link" href="{{ url_for('operation') }}">Torna alla home</a>
+      <a class="button-link" href="{{ url_for('settings') }}">Impostazioni</a>
+    </div>
+  </div>
+
+  <div class="guidance-strip">
+    <div>
+      <strong>Input</strong>
+      <span>Carica un file oppure incolla il sorgente LaTeX.</span>
+    </div>
+    <div>
+      <strong>Rilevamento</strong>
+      <span>Scegli la struttura usata per riconoscere le voci reali.</span>
+    </div>
+    <div>
+      <strong>Conferma</strong>
+      <span>Escludi falsi positivi, correggi definizioni e salva.</span>
+    </div>
+  </div>
+
+  <form method="post" class="stack format-flow">
+    <section id="format-input" class="form-section guided-block">
+      <div>
+        <p class="section-kicker">Passo 1</p>
+        <h2>Input glossario</h2>
+        <p class="muted">Se scegli un file locale, l'app puo anche sovrascriverlo alla conferma. Se incolli il contenuto, salva come nuovo file.</p>
+      </div>
+      <label>File glossario .tex
+        <span class="field-with-action wide">
+          <input id="source_glossary_path" name="source_glossary_path" value="{{ source_path }}" placeholder="/percorso/Glossario.tex">
+          <button type="button" data-picker data-kind="file" data-target="#source_glossary_path">Scegli</button>
+        </span>
+      </label>
+      <label>Oppure incolla contenuto LaTeX
+        <textarea name="glossary_text" rows="10" placeholder="Incolla qui il contenuto del glossario se non vuoi leggere da file.">{{ raw_text }}</textarea>
+      </label>
+    </section>
+
+    <section id="format-detection" class="form-section guided-block">
+      <div>
+        <p class="section-kicker">Passo 2</p>
+        <h2>Metodo di rilevamento</h2>
+        <p class="muted">Indica quale struttura identifica una voce del glossario. Usa il metodo esplicito quando conosci il formato del file: riduce i falsi positivi nei preamboli e nelle macro.</p>
+      </div>
+      <fieldset class="segmented-field three-options">
+        <legend>Come leggere le voci</legend>
+        <label><input type="radio" name="glossary_detection" value="auto" {% if config.glossary_detection not in ["structured", "subsection"] %}checked{% endif %}> Automatico</label>
+        <label><input type="radio" name="glossary_detection" value="structured" {% if config.glossary_detection == "structured" %}checked{% endif %}> Macro <code>\glossaryentry{id}{Termine}</code></label>
+        <label><input type="radio" name="glossary_detection" value="subsection" {% if config.glossary_detection == "subsection" %}checked{% endif %}> Sezioni <code>\subsection{Termine}</code></label>
+      </fieldset>
+      <div class="actions">
+        <a class="button-link" href="{{ url_for('operation') }}">Indietro</a>
+        <button name="action" value="format" type="submit">Rileva e genera anteprima</button>
+      </div>
+    </section>
+
+    {% if formatted_text %}
+      <section id="format-review" class="form-section guided-block">
+        <div>
+          <p class="section-kicker">Passo 3</p>
+          <h2>Revisione voci rilevate</h2>
+          <p class="muted">Controlla una pagina alla volta. Le voci selezionate saranno salvate nel glossario rilevato; quelle escluse non verranno usate dal linker.</p>
+        </div>
+        <div class="stats compact-stats">
+          <div><strong>{{ entries | length }}</strong><span>Voci rilevate</span></div>
+          <div><strong data-format-included-count>{{ entries | length }}</strong><span>Incluse</span></div>
+          <div><strong>{{ entries | selectattr("aliases") | list | length }}</strong><span>Con alias</span></div>
+        </div>
+        {% if entries %}
+          <div class="entries-toolbar format-review-toolbar">
+            <div>
+              <h3>Voci da confermare</h3>
+              <p class="muted">Cerca per termine, ID, definizione o alias. La tabella mostra 10 righe per pagina per evitare revisioni troppo dense.</p>
+            </div>
+            <div class="entries-tools">
+              <input class="search" type="search" data-format-search aria-label="Cerca nelle voci rilevate" placeholder="Cerca nelle voci rilevate">
+              <div class="pager compact-pager">
+                <button type="button" data-format-prev>‹</button>
+                <span data-format-page-label>1 / 1</span>
+                <button type="button" data-format-next>›</button>
+              </div>
+            </div>
+          </div>
+          <div class="table-wrap format-table-wrap">
+            <table class="entries-table compact format-entry-table">
+              <colgroup>
+                <col class="include-col">
+                <col class="term-col">
+                <col class="definition-col">
+                <col class="alias-col">
+              </colgroup>
+              <thead>
+                <tr><th>Includi</th><th>Termine</th><th>Definizione</th><th>Alias</th></tr>
+              </thead>
+              <tbody data-format-table>
+                {% for entry in entries | sort(attribute="term") %}
+                  <tr data-entry data-format-entry data-entry-id="{{ entry.id }}" data-entry-term="{{ entry.term | lower }}">
+                    <td>
+                      <label class="include-entry icon-only" title="Includi {{ entry.term }}">
+                        <input type="checkbox" name="include_entry_id" value="{{ entry.id }}" checked data-format-include aria-label="Includi {{ entry.term }}">
+                      </label>
+                    </td>
+                    <td>
+                      <div class="entry-term-cell">
+                        <strong>{{ entry.term }}</strong>
+                        <code>{{ entry.id }}</code>
+                        <input type="hidden" name="entry_id" value="{{ entry.id }}">
+                        <input type="hidden" name="term_{{ entry.id }}" value="{{ entry.term }}">
+                      </div>
+                    </td>
+                    <td><textarea class="definition-input" name="definition_{{ entry.id }}" rows="2">{{ entry.definition }}</textarea></td>
+                    <td><input class="alias-input" name="aliases_{{ entry.id }}" value="{{ entry.aliases | join(', ') }}" placeholder="alias separati da virgola"></td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <p class="empty-state">Nessuna voce rilevata. Cambia metodo di rilevamento o controlla il contenuto del glossario.</p>
+        {% endif %}
+      </section>
+
+      <section id="format-output" class="form-section guided-block">
+        <div>
+          <p class="section-kicker">Passo 4</p>
+          <h2>Salvataggio e PDF</h2>
+          <p class="muted">Il testo formattato resta modificabile prima del salvataggio. La compilazione usa il tuo ambiente LaTeX locale configurato nelle impostazioni.</p>
+        </div>
+        <label>Anteprima sorgente formattato
+          <textarea name="formatted_text" rows="12">{{ formatted_text }}</textarea>
+        </label>
+        <fieldset class="segmented-field">
+          <legend>Dove salvare</legend>
+          <label><input type="radio" name="save_mode" value="copy" checked> Nuovo file <code>.tex</code></label>
+          <label><input type="radio" name="save_mode" value="overwrite"> Sovrascrivi file sorgente</label>
+        </fieldset>
+        <label>Path nuovo file
+          <input name="output_path" value="{{ output_path }}" placeholder="/percorso/Glossario.formatted.tex">
+        </label>
+        <label>Nome PDF opzionale
+          <input name="pdf_name" placeholder="Glossario.pdf">
+        </label>
+        <div class="actions">
+          <button name="action" value="format" type="submit">Aggiorna anteprima</button>
+          <button class="primary" name="action" value="save_formatted" type="submit">Salva glossario</button>
+          <button name="action" value="compile_formatted" type="submit">Salva e compila PDF</button>
+        </div>
+      </section>
+    {% endif %}
+  </form>
+</section>
+{% endblock %}

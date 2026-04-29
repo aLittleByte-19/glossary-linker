@@ -216,3 +216,11 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Glossary Linker local artifacts
+glossary-linker.local.yml
+.glossary-linker-secret
+*.linked.tex
+reports/
+vendor/
+glossary-linker-report.*

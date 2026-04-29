@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block progress %}
+<nav class="workflow-progress" aria-label="Avanzamento">
+  <a class="active" href="{{ url_for('operation') }}">Operazione</a>
+  {% if has_operation %}
+    <a href="{{ url_for('glossary_rules') }}">Regole</a>
+  {% else %}
+    <span class="disabled">Regole</span>
+  {% endif %}
+  <span class="disabled">Revisione</span>
+  <span class="disabled">Output</span>
+</nav>
+{% endblock %}
+{% block content %}
+<section class="home-layout app-home">
+  <section class="panel home-card" aria-labelledby="operation-title">
+    <div class="section-head">
+      <div>
+        <p class="section-kicker">Scegli il flusso</p>
+        <h1 id="operation-title">Cosa vuoi fare?</h1>
+        <p class="muted">Ogni flusso ti accompagna fino a un punto di conferma. I sorgenti vengono sovrascritti solo se lo scegli esplicitamente alla fine.</p>
+      </div>
+    </div>
+    <form method="post" action="{{ url_for('set_operation') }}" class="operation-grid">
+      <label class="operation-card">
+        <input type="radio" name="operation" value="link-documents" {% if selected_operation == "link-documents" %}checked{% endif %}>
+        <span class="operation-icon" aria-hidden="true">01</span>
+        <span>
+          <strong>Linka documenti</strong>
+          <small>Per scegliere uno o più file <code>.tex</code>, generare copie <code>.linked.tex</code> e rivedere solo i termini manuali.</small>
+        </span>
+      </label>
+      <label class="operation-card">
+        <input type="radio" name="operation" value="update-glossary" {% if selected_operation == "update-glossary" %}checked{% endif %}>
+        <span class="operation-icon" aria-hidden="true">02</span>
+        <span>
+          <strong>Aggiorna per nuove voci</strong>
+          <small>Per scansionare i documenti della root e applicare soltanto gli ID nuovi o indicati.</small>
+        </span>
+      </label>
+      <label class="operation-card">
+        <input type="radio" name="operation" value="format-glossary" {% if selected_operation == "format-glossary" %}checked{% endif %}>
+        <span class="operation-icon" aria-hidden="true">03</span>
+        <span>
+          <strong>Formatta glossario .tex</strong>
+          <small>Per partire da sezioni LaTeX, confermare le voci rilevate e salvare un glossario con ID stabili.</small>
+        </span>
+      </label>
+      <div class="home-actions">
+        <p class="muted">Il flusso selezionato è salvato come preferenza locale per il prossimo avvio.</p>
+        <button class="primary" type="submit">Continua</button>
+      </div>
+    </form>
+  </section>
+
+  <div class="home-hero">
+    <div class="home-intro">
+      <p class="eyebrow">Wizard locale per LaTeX</p>
+      <h1>Collega i termini al glossario senza perdere il controllo editoriale.</h1>
+      <p>Glossary Linker prepara link leggibili, evita le zone delicate del sorgente e ti chiede una decisione solo per i termini segnati come manuali.</p>
+      <div class="home-quick-actions" aria-label="Azioni rapide">
+        <a class="button-link primary-link" href="{{ url_for('help_page') }}">Leggi la guida</a>
+        <a class="button-link" href="{{ url_for('settings') }}">Controlla impostazioni</a>
+        <a class="button-link" href="{{ url_for('entries') }}">Glossario rilevato</a>
+      </div>
+    </div>
+
+    <aside class="setup-card" aria-label="Stato configurazione">
+      <div class="setup-card-head">
+        <h2>Stato progetto</h2>
+        <span class="status-badge {% if home_status.root_ok and home_status.glossary_ok and home_status.entries_total %}ok{% else %}warn{% endif %}">
+          {% if home_status.root_ok and home_status.glossary_ok and home_status.entries_total %}Pronto{% else %}Da controllare{% endif %}
+        </span>
+      </div>
+      <dl class="setup-list">
+        <div>
+          <dt>Root predefinita</dt>
+          <dd><span class="status-dot {% if home_status.root_ok %}ok{% else %}warn{% endif %}"></span><code title="{{ home_status.root_label }}">{{ home_status.root_label }}</code></dd>
+        </div>
+        <div>
+          <dt>Glossario sorgente</dt>
+          <dd><span class="status-dot {% if home_status.glossary_ok %}ok{% else %}warn{% endif %}"></span><code title="{{ home_status.glossary_label }}">{{ home_status.glossary_label }}</code></dd>
+        </div>
+        <div>
+          <dt>PDF pubblico</dt>
+          <dd><span class="status-dot {% if home_status.glossary_pdf_ok %}ok{% else %}warn{% endif %}"></span>{% if home_status.glossary_pdf_ok %}URL configurato{% else %}URL mancante{% endif %}</dd>
+        </div>
+      </dl>
+      <div class="setup-metrics">
+        <div><strong>{{ home_status.entries_total }}</strong><span>voci</span></div>
+        <div><strong>{{ home_status.entries_manual }}</strong><span>manuali</span></div>
+        <div><strong>{{ home_status.rules_total }}</strong><span>regole</span></div>
+      </div>
+    </aside>
+  </div>
+
+  <section class="home-support-grid" aria-label="Indicazioni rapide">
+    <article class="support-card">
+      <h2>Prima di linkare</h2>
+      <p>Controlla che il glossario rilevato contenga solo voci reali e che i termini ambigui siano in modalità Manuale.</p>
+    </article>
+    <article class="support-card">
+      <h2>Durante la revisione</h2>
+      <p>Le azioni estese applicano la scelta al file o al termine. Puoi ancora tornare indietro prima del report finale.</p>
+    </article>
+    <article class="support-card">
+      <h2>Alla fine</h2>
+      <p>Salva copie <code>.linked.tex</code> per una verifica non distruttiva, oppure sovrascrivi solo quando il risultato è approvato.</p>
+    </article>
+  </section>
+</section>
+{% endblock %}

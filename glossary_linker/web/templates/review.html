@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block progress %}
+<nav class="workflow-progress" aria-label="Avanzamento">
+  <a href="{{ url_for('operation') }}">Operazione</a>
+  <a href="{{ url_for('glossary_rules') }}">Regole</a>
+  <a class="active" href="{{ url_for('review', job_id=job_id, index=index) }}">Revisione</a>
+  <a href="{{ url_for('output', job_id=job_id) }}">Output</a>
+</nav>
+{% endblock %}
+{% block content %}
+<section class="panel review-panel">
+  <form method="post" class="review-layout">
+    <header class="review-header">
+      <button name="action" value="prev" type="submit" class="nav-button" {% if index == 0 %}disabled{% endif %}>Indietro</button>
+      <div>
+        <p class="eyebrow">Revisione manuale</p>
+        <h1>Occorrenza {{ index + 1 }} di {{ total }}</h1>
+        <p class="muted">Termine {{ term_index }} di {{ term_total }} · Occorrenza {{ same_term_index }} di {{ same_term_total }} per il termine corrente</p>
+      </div>
+      <button name="action" value="next" type="submit" class="nav-button" {% if index + 1 == total %}disabled{% endif %}>Avanti</button>
+    </header>
+
+    <section class="review-term">
+      <h2>Definizione dal glossario</h2>
+      <p>{{ entry.definition or "Nessuna definizione disponibile nel glossario." }}</p>
+    </section>
+
+    <section class="review-position">
+      <h2>Posizione</h2>
+      <div class="review-file-title">
+        <span>File corrente</span>
+        <strong>{{ occurrence.file_path.name }}</strong>
+        <code>{{ occurrence.file_path }}</code>
+      </div>
+      <dl>
+        <div><dt>Riga</dt><dd>{{ occurrence.line_number }}</dd></div>
+        <div><dt>Sezione</dt><dd>{{ occurrence.section or "Non rilevata" }}</dd></div>
+        <div><dt>Decisione</dt><dd>{% if decision is sameas true %}Collega{% elif decision is sameas false %}Salta{% else %}Da decidere{% endif %}</dd></div>
+      </dl>
+    </section>
+
+    <section class="review-context-block">
+      <div class="section-head">
+        <h2>Contesto</h2>
+        <span class="term-pill">{{ occurrence.visible_text }}</span>
+      </div>
+      <pre class="context review-context">{{ highlighted_context }}</pre>
+    </section>
+
+    <section class="decision-panel">
+      <div>
+        <h2>Azioni estese</h2>
+        <p class="muted">Usale quando la stessa decisione vale per piu occorrenze. Puoi ancora tornare indietro e cambiare le scelte prima del report.</p>
+      </div>
+
+      <div class="bulk-actions">
+        <section class="bulk-action-card">
+          <div>
+            <h3>Nel file corrente</h3>
+            <p>Stesso termine, solo nel documento aperto.</p>
+          </div>
+          <div class="bulk-action-buttons">
+            <button class="danger-action" name="action" value="skip_file_term" type="submit">Salta restanti</button>
+            <button class="success-outline" name="action" value="link_file_term" type="submit">Collega restanti</button>
+          </div>
+        </section>
+        <section class="bulk-action-card">
+          <div>
+            <h3>Per questo termine</h3>
+            <p>Applica la scelta in tutti i file selezionati.</p>
+          </div>
+          <div class="bulk-action-buttons">
+            <button class="danger-action" name="action" value="skip_term_all" type="submit">Salta ovunque</button>
+            <button class="success-outline" name="action" value="link_term_all" type="submit">Collega ovunque</button>
+          </div>
+        </section>
+        <section class="bulk-action-card">
+          <div>
+            <h3>File e report</h3>
+            <p>Scarta il file corrente o chiudi la revisione.</p>
+          </div>
+          <div class="bulk-action-buttons">
+            <button class="danger-action" name="action" value="skip_file" type="submit">Salta file</button>
+            <button name="action" value="finish" type="submit">Vai al report</button>
+          </div>
+        </section>
+      </div>
+
+      <div class="primary-decision-block">
+        <div>
+          <h2>Decisione su questa occorrenza</h2>
+          <p class="muted">Questa scelta vale solo per la parola evidenziata nel contesto.</p>
+        </div>
+        <div class="decision-grid primary-decisions">
+          <button class="danger-primary" name="action" value="skip" type="submit">Salta</button>
+          <button class="success-primary" name="action" value="link" type="submit">Collega</button>
+        </div>
+      </div>
+    </section>
+  </form>
+</section>
+{% endblock %}

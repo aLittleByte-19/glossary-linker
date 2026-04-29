@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <div class="page-head">
+    <div>
+      <h1>Guida Glossary Linker</h1>
+      <p>Questa guida vive nel file <code>{{ guide_path }}</code>. Puoi leggerla qui dentro oppure aprirla dal progetto.</p>
+    </div>
+    <div class="page-actions">
+      <a class="button-link" href="{{ url_for('operation') }}">Torna alla home</a>
+      <a class="button-link" href="{{ url_for('settings') }}">Impostazioni</a>
+    </div>
+  </div>
+  <div class="doc-layout">
+    {{ guide_toc }}
+    <article class="doc-page">
+      {{ guide_html }}
+    </article>
+  </div>
+  <div class="flow-actions">
+    <a class="button-link" href="{{ url_for('operation') }}">Torna alla home</a>
+    <a class="button-link" href="{{ url_for('settings') }}">Apri impostazioni</a>
+  </div>
+</section>
+{% endblock %}

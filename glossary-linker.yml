@@ -1,0 +1,36 @@
+glossary_pdf_url: vendor/documentazione-glossario/RTB/Glossario/Glossario.pdf
+glossary_path: vendor/documentazione-glossario/RTB/Glossario/Glossario.tex
+anchor_format: '#nameddest=gls:{id}'
+glossary_detection: auto
+excluded_entry_ids: []
+exclude_file_patterns:
+- '*.linked.tex'
+- '**/build/**'
+- '**/output/**'
+- '**/dist/**'
+- '**/tmp/**'
+- '**/prove/**'
+- '**/prompt.tex'
+ignored_environments:
+- verbatim
+- lstlisting
+- minted
+- listing
+- code
+ignored_commands:
+- href
+- url
+- glslink
+- part
+- chapter
+- section
+- subsection
+- subsubsection
+- paragraph
+- subparagraph
+- title
+- caption
+ignored_sections:
+- frontespizio
+- indice
+entries: {}
