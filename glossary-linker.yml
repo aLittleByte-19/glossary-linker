@@ -1,5 +1,5 @@
-glossary_pdf_url: /Users/leonardo/Desktop/git_projects.nosync/glossary-linker/vendor/documentazione-glossario/RTB/Glossario/Glossario.pdf
-glossary_path: /Users/leonardo/Desktop/git_projects.nosync/glossary-linker/vendor/documentazione-glossario/RTB/Glossario/Glossario.tex
+glossary_pdf_url: vendor/documentazione-glossario/RTB/Glossario/Glossario.pdf
+glossary_path: vendor/documentazione-glossario/RTB/Glossario/Glossario.tex
 anchor_format: '#nameddest=gls:{id}'
 glossary_detection: auto
 excluded_entry_ids: []
