@@ -77,8 +77,9 @@ async function refreshGlossaryEntries({ forced = false } = {}) {
   const payload = {
     repo_root: document.querySelector("#repo_root")?.value || "",
     glossary_path: document.querySelector("#glossary_path")?.value || "",
-    glossary_pdf_url: document.querySelector("#glossary_pdf_url")?.value || "",
-    anchor_format: document.querySelector("#anchor_format")?.value || ""
+    glossary_html_url: document.querySelector("#glossary_html_url")?.value || "",
+    glossary_link_target: "html",
+    html_anchor_format: document.querySelector("#html_anchor_format")?.value || ""
   };
   const detection = document.querySelector('input[name="glossary_detection"]:checked');
   if (detection) payload.glossary_detection = detection.value;
@@ -147,8 +148,9 @@ async function saveWizardState() {
     operation: document.querySelector('input[name="operation"]:checked')?.value || "",
     repo_root: document.querySelector("#repo_root")?.value || "",
     glossary_path: document.querySelector("#glossary_path")?.value || "",
-    glossary_pdf_url: document.querySelector("#glossary_pdf_url")?.value || "",
-    anchor_format: document.querySelector("#anchor_format")?.value || "",
+    glossary_html_url: document.querySelector("#glossary_html_url")?.value || "",
+    glossary_link_target: "html",
+    html_anchor_format: document.querySelector("#html_anchor_format")?.value || "",
     source_dir: document.querySelector("#source_dir")?.value || ".",
     review_order: form.querySelector('input[name="review_order"]:checked')?.value || "by_term",
     new_entry_ids: form.querySelector('input[name="new_entry_ids"]')?.value || ""
@@ -464,7 +466,7 @@ function initSettingsSearch() {
   if (!search || !sidebar) return;
   search.addEventListener("input", () => {
     const query = search.value.trim().toLowerCase();
-    sidebar.querySelectorAll(".settings-nav-group").forEach((group) => {
+    sidebar.querySelectorAll(".settings-nav-section").forEach((group) => {
       let visibleLinks = 0;
       group.querySelectorAll("a").forEach((link) => {
         const isVisible = !query || link.textContent.toLowerCase().includes(query);
@@ -473,6 +475,78 @@ function initSettingsSearch() {
       });
       group.hidden = visibleLinks === 0;
     });
+  });
+}
+
+function initScrollSpy() {
+  document.querySelectorAll("[data-scrollspy]").forEach((nav) => {
+    const links = [...nav.querySelectorAll("[data-scroll-link]")];
+    const targets = links
+      .map((link) => {
+        const hash = decodeURIComponent(link.hash || "");
+        const target = hash ? document.getElementById(hash.slice(1)) : null;
+        return target ? { link, target } : null;
+      })
+      .filter(Boolean);
+    if (!targets.length) return;
+
+    const getOffset = () => {
+      const explicit = Number(nav.dataset.scrollOffset || 0);
+      if (explicit > 0) return explicit;
+      const cssOffset = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--anchor-offset"));
+      if (cssOffset > 0) return cssOffset;
+      const topbar = document.querySelector(".topbar");
+      return (topbar?.getBoundingClientRect().height || 96) + 48;
+    };
+    const setActive = (activeLink) => {
+      links.forEach((link) => {
+        const isActive = link === activeLink;
+        link.classList.toggle("active", isActive);
+        link.toggleAttribute("aria-current", isActive);
+      });
+      nav.querySelectorAll(".active-section").forEach((item) => item.classList.remove("active-section"));
+      const section = activeLink.closest(".settings-nav-section, .level-2");
+      if (section) section.classList.add("active-section");
+    };
+
+    const update = () => {
+      const bottom = window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2;
+      let active = targets[0];
+      if (bottom) {
+        active = targets[targets.length - 1];
+      } else {
+        const marker = getOffset() + 8;
+        for (const item of targets) {
+          if (item.target.getBoundingClientRect().top <= marker) active = item;
+        }
+      }
+      setActive(active.link);
+    };
+
+    links.forEach((link) => {
+      link.addEventListener("click", (event) => {
+        const target = targets.find((item) => item.link === link)?.target;
+        if (!target) return;
+        event.preventDefault();
+        const top = window.scrollY + target.getBoundingClientRect().top - getOffset();
+        window.history.pushState(null, "", link.hash);
+        window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+        window.setTimeout(update, 140);
+      });
+    });
+    window.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    if (window.location.hash) {
+      const initial = targets.find((item) => item.link.hash === window.location.hash);
+      if (initial) {
+        window.setTimeout(() => {
+          const top = window.scrollY + initial.target.getBoundingClientRect().top - getOffset();
+          window.scrollTo({ top: Math.max(0, top) });
+          update();
+        }, 0);
+      }
+    }
+    update();
   });
 }
 
@@ -629,6 +703,7 @@ document.addEventListener("click", (event) => {
 document.addEventListener("DOMContentLoaded", () => {
   initRuleEditors();
   initSettingsSearch();
+  initScrollSpy();
   document.querySelectorAll("[data-file-list]").forEach((button) => {
     const target = document.querySelector(button.dataset.target);
     if (target) renderFileList(target, button.dataset.fileList);

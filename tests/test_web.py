@@ -1,9 +1,9 @@
 from dataclasses import asdict
 
-from glossary_linker.core.config import EditorialConfig, save_editorial_config
+from glossary_linker.core.config import EditorialConfig, LocalConfig, save_editorial_config, save_local_config
 from glossary_linker.core.glossary import load_entries_store, save_entries_store
 from glossary_linker.core.models import GlossaryEntry, ProcessingReport
-from glossary_linker.web.app import JOBS, create_app
+from glossary_linker.web.app import JOBS, create_app, _glossary_link_warnings
 
 
 def test_glossary_rules_requires_current_operation_session():
@@ -80,6 +80,44 @@ def test_output_does_not_print_missing_term_names(tmp_path):
     assert "Termini non trovati" in html
     assert "Termine Assente" not in html
     JOBS.pop(job_id, None)
+
+
+def test_glossary_link_warning_requires_generated_html_url(tmp_path):
+    config = EditorialConfig(glossary_path="Glossario.tex", glossary_html_url="")
+    entries = [GlossaryEntry("accuratezza", "Accuratezza")]
+
+    warnings = _glossary_link_warnings(config, entries, tmp_path)
+
+    assert warnings
+    assert "Glossario.html" in warnings[0]
+
+
+def test_glossary_html_route_renders_entries_from_configured_tex(monkeypatch, tmp_path):
+    import glossary_linker.web.app as webapp
+
+    glossary = tmp_path / "Glossario.tex"
+    glossary.write_text(
+        r"""\begin{document}
+\subsection{Accuratezza}
+Definizione.
+\end{document}""",
+        encoding="utf-8",
+    )
+    editorial_path = tmp_path / "glossary-linker.yml"
+    local_path = tmp_path / "glossary-linker.local.yml"
+    save_editorial_config(EditorialConfig(glossary_path="Glossario.tex", glossary_detection="subsection"), editorial_path)
+    save_local_config(LocalConfig(default_repo_root=str(tmp_path)), local_path)
+    monkeypatch.setattr(webapp, "EDITORIAL_PATH", editorial_path)
+    monkeypatch.setattr(webapp, "LOCAL_PATH", local_path)
+    app = create_app()
+    client = app.test_client()
+
+    response = client.get("/glossary-html")
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert 'id="gls-accuratezza"' in html
+    assert "Accuratezza" in html
 
 
 def test_entries_page_is_only_for_modes_and_aliases(monkeypatch, tmp_path):

@@ -84,6 +84,7 @@ def test_format_glossary_converts_subsections_to_structured_entries():
     formatted = format_glossary_text(r"\begin{document}\subsection{Accuratezza}Testo\end{document}")
 
     assert r"\providecommand{\glossaryentry}" in formatted
+    assert r"\hypertarget{gls:#1}{}" in formatted
     assert r"\glossaryentry{accuratezza}{Accuratezza}" in formatted
 
 
@@ -97,6 +98,7 @@ def test_format_glossary_does_not_rewrite_glossaryentry_macro_body():
 
     assert r"\glossaryentry{2}{#2}" not in formatted
     assert r"\subsection{#2}" in formatted
+    assert r"\hypertarget{gls:#1}{}" in formatted
 
 
 def test_parenthetical_terms_get_useful_aliases():

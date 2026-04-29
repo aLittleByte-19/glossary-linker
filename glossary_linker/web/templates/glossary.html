@@ -40,7 +40,7 @@
       <div>
         <p class="section-kicker">Passo 1</p>
         <h2>Sorgenti</h2>
-        <p class="muted">La root progetto serve per mostrare path relativi e per scansionare i documenti. Il glossario puo essere un path locale o un URL; l'URL del PDF è quello che finirà nei link.</p>
+        <p class="muted">La root progetto serve per mostrare path relativi e per scansionare i documenti. Il glossario <code>.tex</code> viene parsato dal tool per generare la pagina HTML con anchor stabili.</p>
       </div>
       <label>Root progetto
         <span class="field-with-action wide">
@@ -54,19 +54,27 @@
           <button type="button" data-picker data-kind="file" data-target="#glossary_path">Scegli</button>
         </span>
       </label>
-      <label>URL finale Glossario.pdf
-        <input id="glossary_pdf_url" name="glossary_pdf_url" value="{{ config.glossary_pdf_url }}" data-glossary-source data-persist>
+      <input type="hidden" name="glossary_link_target" value="html">
+      <input type="hidden" id="html_anchor_format" name="html_anchor_format" value="{{ config.html_anchor_format or '#gls-{id}' }}" data-glossary-source data-persist>
+    </div>
+
+    <div class="form-section guided-block">
+      <div>
+        <p class="section-kicker">Passo 2</p>
+        <h2>HTML generato dal glossario</h2>
+        <p class="muted">Il parsing <code>.tex -> .html</code> e obbligatorio: l'app genera la pagina HTML del glossario e i documenti vengono linkati alle sue anchor <code>#gls-id</code>.</p>
+      </div>
+      <label>URL usato nei documenti
+        <input id="glossary_html_url" name="glossary_html_url" value="{{ config.glossary_html_url or local_glossary_html_url }}" placeholder="{{ local_glossary_html_url }}" data-glossary-source data-persist>
       </label>
-      <label>Formato anchor
-        <input id="anchor_format" name="anchor_format" value="{{ config.anchor_format }}" data-glossary-source data-persist>
-      </label>
+      <p class="muted">Per i test locali usa <code>{{ local_glossary_html_url }}</code> mentre l'app e in esecuzione. Per Pages usa l'URL remoto dello stesso HTML generato dal tool.</p>
     </div>
 
     {% if operation == "link-documents" %}
       <section class="input-group guided-block">
         <div class="section-head">
           <div>
-            <p class="section-kicker">Passo 2</p>
+            <p class="section-kicker">Passo 3</p>
             <h2>Documenti da linkare</h2>
             <p class="muted">Seleziona singoli file oppure fai rilevare i <code>.tex</code>. I file dentro la root sono mostrati come path relativi; quelli fuori root restano assoluti.</p>
           </div>
@@ -110,7 +118,7 @@
       </section>
     {% else %}
       <section class="input-group guided-block">
-        <p class="section-kicker">Passo 2</p>
+        <p class="section-kicker">Passo 3</p>
         <h2>Nuove voci</h2>
         <p class="muted">Inserisci gli ID delle voci appena aggiunte al glossario. Se lasci vuoto, l'app usa tutte le voci disponibili.</p>
         <label>ID delle nuove voci, separati da virgola
@@ -122,7 +130,7 @@
     <section class="form-section guided-block">
       <div>
         <div>
-          <p class="section-kicker">Passo 3</p>
+          <p class="section-kicker">Passo 4</p>
           <h2>Glossario rilevato</h2>
           <p class="muted">Le voci sono salvate in <code>{{ entries_path.name }}</code>. Da qui puoi solo consultare la lista usata per il linking e modificare Automatico/Manuale.</p>
         </div>

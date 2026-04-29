@@ -8,7 +8,7 @@ import sys
 import re
 from urllib.request import urlopen
 
-from flask import Flask, flash, jsonify, redirect, render_template, request, session, url_for
+from flask import Flask, Response, flash, jsonify, redirect, render_template, request, session, url_for
 from markupsafe import Markup, escape
 
 from glossary_linker.core.compiler import compile_tex, test_environment
@@ -27,6 +27,7 @@ from glossary_linker.core.glossary import (
     merge_detected_with_store,
     save_entries_store,
 )
+from glossary_linker.core.html import render_glossary_html, save_glossary_html
 from glossary_linker.core.linker import (
     collect_manual_occurrences,
     discover_tex_files,
@@ -102,6 +103,7 @@ def create_app() -> Flask:
                 local_server_port=int(request.form.get("local_server_port", "8765") or 8765),
                 auto_open_pdf=bool(request.form.get("auto_open_pdf")),
                 clean_aux_files=bool(request.form.get("clean_aux_files")),
+                clean_compile_artifacts=bool(request.form.get("clean_compile_artifacts")),
                 log_level=request.form.get("log_level", "INFO"),
                 preferred_browser=request.form.get("preferred_browser", ""),
             )
@@ -121,6 +123,15 @@ def create_app() -> Flask:
             guide_toc=_render_markdown_toc(headings),
             guide_path=GUIDE_PATH,
         )
+
+    @app.get("/glossary-html")
+    def glossary_html_page():
+        config = _load_editorial()
+        try:
+            entries = _load_entries_from_config_path(config)
+        except Exception:
+            entries = load_entries_store(ENTRIES_PATH)
+        return Response(render_glossary_html(entries), mimetype="text/html; charset=utf-8")
 
     @app.get("/environment")
     def environment():
@@ -148,8 +159,9 @@ def create_app() -> Flask:
         config = _load_editorial()
         local = _load_local()
         config.glossary_path = payload.get("glossary_path", config.glossary_path)
-        config.glossary_pdf_url = payload.get("glossary_pdf_url", config.glossary_pdf_url)
-        config.anchor_format = payload.get("anchor_format", config.anchor_format)
+        config.glossary_html_url = payload.get("glossary_html_url", config.glossary_html_url) or _local_glossary_html_url(local)
+        config.glossary_link_target = "html"
+        config.html_anchor_format = payload.get("html_anchor_format", config.html_anchor_format)
         config.glossary_detection = payload.get("glossary_detection", config.glossary_detection)
         root = payload.get("repo_root", local.default_repo_root)
         local.default_repo_root = root or local.default_repo_root
@@ -162,6 +174,7 @@ def create_app() -> Flask:
             stored = [entry for entry in load_entries_store(ENTRIES_PATH) if entry.id not in set(config.excluded_entry_ids)]
             entries, new_count = merge_detected_with_store(detected, stored)
             save_entries_store(entries, ENTRIES_PATH)
+            _persist_glossary_html(config, local, entries)
         except Exception as exc:
             return jsonify({"ok": False, "error": str(exc), "stats": {}}), 400
         return jsonify({"ok": True, "stats": _entries_stats(entries, new_count)})
@@ -221,8 +234,9 @@ def create_app() -> Flask:
 
         if request.method == "POST":
             config.glossary_path = request.form.get("glossary_path", config.glossary_path)
-            config.glossary_pdf_url = request.form.get("glossary_pdf_url", config.glossary_pdf_url)
-            config.anchor_format = request.form.get("anchor_format", config.anchor_format)
+            config.glossary_html_url = request.form.get("glossary_html_url", config.glossary_html_url) or _local_glossary_html_url(local)
+            config.glossary_link_target = "html"
+            config.html_anchor_format = request.form.get("html_anchor_format", config.html_anchor_format)
             _update_local_from_form(local)
             save_editorial_config(config, EDITORIAL_PATH)
             save_local_config(local, LOCAL_PATH)
@@ -236,14 +250,25 @@ def create_app() -> Flask:
                     target = _path_from(config.glossary_path, local.default_repo_root)
                     target.parent.mkdir(parents=True, exist_ok=True)
                     target.write_text(formatted_text, encoding="utf-8")
+                    html_target = _default_glossary_html_path(target)
+                    save_glossary_html(entries, html_target)
+                    config.glossary_html_url = _local_glossary_html_url(local)
+                    save_editorial_config(config, EDITORIAL_PATH)
                     flash(f"Glossario formattato salvato in {target}.", "success")
+                    flash(f"Glossario HTML salvato in {html_target}.", "success")
             else:
                 entries = [entry for entry in load_entries_store(ENTRIES_PATH) if entry.id not in set(config.excluded_entry_ids)]
 
             if action == "continue":
-                if not entries:
+                detected = _load_detected_entries(config, local.default_repo_root)
+                if detected:
+                    stored = [entry for entry in load_entries_store(ENTRIES_PATH) if entry.id not in set(config.excluded_entry_ids)]
+                    entries, _new_count = merge_detected_with_store(detected, stored)
+                    save_entries_store(entries, ENTRIES_PATH)
+                elif not entries:
                     entries = _load_entries_from_config_path(config)
                     save_entries_store(entries, ENTRIES_PATH)
+                _persist_glossary_html(config, local, entries)
                 return _start_processing(config, local, entries, operation)
 
         return render_template(
@@ -254,6 +279,7 @@ def create_app() -> Flask:
             entries_path=ENTRIES_PATH,
             formatted_text=formatted_text,
             operation=operation,
+            local_glossary_html_url=_local_glossary_html_url(local),
         )
 
     @app.route("/format-glossary", methods=["GET", "POST"])
@@ -290,9 +316,14 @@ def create_app() -> Flask:
                 else:
                     target.parent.mkdir(parents=True, exist_ok=True)
                     target.write_text(formatted_text, encoding="utf-8")
+                    html_target = _default_glossary_html_path(target)
+                    save_glossary_html(entries, html_target)
                     config.glossary_path = str(target)
+                    config.glossary_html_url = _local_glossary_html_url(local)
+                    config.glossary_link_target = "html"
                     save_editorial_config(config, EDITORIAL_PATH)
                     flash(f"Glossario formattato salvato in {target}.", "success")
+                    flash(f"Glossario HTML salvato in {html_target}.", "success")
                     if action == "compile_formatted":
                         pdf_name = request.form.get("pdf_name") or None
                         result = compile_tex(target, local, pdf_name)
@@ -449,7 +480,7 @@ def _home_status(local: LocalConfig, config: EditorialConfig, entries: list[Glos
         "root_ok": root.exists() and root.is_dir(),
         "glossary_label": config.glossary_path or "Non impostato",
         "glossary_ok": glossary_is_url or bool(glossary_path and glossary_path.exists()),
-        "glossary_pdf_ok": bool(config.glossary_pdf_url.strip()),
+        "glossary_html_ok": bool(config.glossary_html_url.strip()),
         "entries_total": len(entries),
         "entries_manual": manual,
         "entries_automatic": len(entries) - manual,
@@ -505,12 +536,25 @@ def _render_markdown_toc(headings: list[dict[str, str | int]]) -> Markup:
     toc_items = [item for item in headings if item["level"] in {2, 3}]
     if not toc_items:
         return Markup("")
-    html = ['<nav class="doc-toc" aria-label="Indice guida"><strong>In questa guida</strong><ol>']
+    html = ['<nav class="doc-toc" aria-label="Indice guida" data-scrollspy><strong>In questa guida</strong><ol class="toc-tree">']
+    open_section = False
     for item in toc_items:
-        html.append(
-            f'<li class="level-{item["level"]}"><a href="#{escape(str(item["id"]))}">'
-            f'{escape(str(item["text"]))}</a></li>'
+        level = int(item["level"])
+        link = (
+            f'<a href="#{escape(str(item["id"]))}" data-scroll-link>'
+            f'{escape(str(item["text"]))}</a>'
         )
+        if level == 2:
+            if open_section:
+                html.append("</ol></li>")
+            html.append(f'<li class="level-2">{link}<ol>')
+            open_section = True
+        elif open_section:
+            html.append(f'<li class="level-3">{link}</li>')
+        else:
+            html.append(f'<li class="level-2 orphan">{link}<ol></ol></li>')
+    if open_section:
+        html.append("</ol></li>")
     html.append("</ol></nav>")
     return Markup("\n".join(str(part) for part in html))
 
@@ -533,7 +577,7 @@ def _render_markdown(text: str, headings: list[dict[str, str | int]] | None = No
         stripped = line.strip()
         if stripped.startswith("```"):
             if in_code:
-                html.append(Markup("<pre><code>") + escape("\n".join(code_lines)) + Markup("</code></pre>"))
+                html.append(Markup('<pre tabindex="0"><code>') + escape("\n".join(code_lines)) + Markup("</code></pre>"))
                 code_lines = []
                 in_code = False
             else:
@@ -569,7 +613,7 @@ def _render_markdown(text: str, headings: list[dict[str, str | int]] | None = No
         html.append(f"<p>{_inline_markdown(stripped)}</p>")
 
     if in_code:
-        html.append(Markup("<pre><code>") + escape("\n".join(code_lines)) + Markup("</code></pre>"))
+        html.append(Markup('<pre tabindex="0"><code>') + escape("\n".join(code_lines)) + Markup("</code></pre>"))
     close_list()
     return Markup("\n".join(str(item) for item in html))
 
@@ -597,6 +641,26 @@ def _default_formatted_path(source_path: str) -> str:
         path = _path_from(source_path, ".")
         return str(path.with_name(path.stem + ".formatted.tex"))
     return str((ROOT / "Glossario.formatted.tex").resolve())
+
+
+def _default_glossary_html_path(tex_path: Path) -> Path:
+    return tex_path.with_suffix(".html")
+
+
+def _local_glossary_html_url(local: LocalConfig) -> str:
+    port = local.local_server_port or 8765
+    return f"http://127.0.0.1:{port}/glossary-html"
+
+
+def _persist_glossary_html(config: EditorialConfig, local: LocalConfig, entries: list[GlossaryEntry]) -> Path | None:
+    if not entries or config.glossary_path.startswith(("http://", "https://")):
+        return None
+    glossary_path = _path_from(config.glossary_path, local.default_repo_root)
+    if not glossary_path.parent.exists():
+        return None
+    html_path = _default_glossary_html_path(glossary_path)
+    save_glossary_html(entries, html_path)
+    return html_path
 
 
 def _format_output_target(form, source_path: str) -> Path | None:
@@ -802,8 +866,9 @@ def _update_local_from_form(local: LocalConfig) -> None:
 
 def _update_config_from_payload(config: EditorialConfig, payload: dict) -> None:
     config.glossary_path = payload.get("glossary_path", config.glossary_path)
-    config.glossary_pdf_url = payload.get("glossary_pdf_url", config.glossary_pdf_url)
-    config.anchor_format = payload.get("anchor_format", config.anchor_format)
+    config.glossary_html_url = payload.get("glossary_html_url", config.glossary_html_url)
+    config.glossary_link_target = "html"
+    config.html_anchor_format = payload.get("html_anchor_format", config.html_anchor_format)
     config.glossary_detection = payload.get("glossary_detection", config.glossary_detection)
     config.exclude_file_patterns = _list_from_payload(payload, "exclude_file_patterns", config.exclude_file_patterns)
     config.ignored_environments = _list_from_payload(payload, "ignored_environments", config.ignored_environments)
@@ -858,6 +923,10 @@ def _entries_from_form(fallback: list[GlossaryEntry], included_ids: set[str] | N
 def _start_processing(config: EditorialConfig, local: LocalConfig, entries: list[GlossaryEntry], operation: str):
     root = _path_from(request.form.get("repo_root", local.default_repo_root), ".")
     excluded: list[Path] = []
+    config.glossary_link_target = "html"
+    if not config.glossary_html_url.strip():
+        config.glossary_html_url = _local_glossary_html_url(local)
+    _persist_glossary_html(config, local, entries)
     warnings: list[str] = _glossary_link_warnings(config, entries, root)
     if operation == "update-glossary":
         paths, excluded = discover_tex_files(root, config)
@@ -896,33 +965,8 @@ def _start_processing(config: EditorialConfig, local: LocalConfig, entries: list
 
 def _glossary_link_warnings(config: EditorialConfig, entries: list[GlossaryEntry], root: Path) -> list[str]:
     warnings: list[str] = []
-    if not config.glossary_pdf_url.strip():
-        warnings.append(
-            "URL finale Glossario.pdf vuoto: i link generati non possono aprire il PDF esterno del glossario."
-        )
-
-    if config.glossary_path.startswith(("http://", "https://")):
-        return warnings
-
-    glossary_path = _path_from(config.glossary_path, root)
-    if not glossary_path.exists():
-        warnings.append(f"Glossario non trovato per verificare gli anchor: {glossary_path}")
-        return warnings
-
-    text = glossary_path.read_text(encoding="utf-8")
-    missing = [
-        entry.id
-        for entry in entries
-        if rf"\label{{gls:{entry.id}}}" not in text and rf"\glossaryentry{{{entry.id}}}" not in text
-    ]
-    if missing:
-        sample = ", ".join(missing[:5])
-        suffix = "..." if len(missing) > 5 else ""
-        warnings.append(
-            f"Il glossario sorgente non contiene anchor stabili gls:* per {len(missing)} voci ({sample}{suffix}). "
-            "Per arrivare alla voce esatta nel PDF serve un glossario formattato con \\glossaryentry{id}{Termine} "
-            "o con \\label{gls:id} per ogni voce."
-        )
+    if not config.glossary_html_url.strip():
+        warnings.append("URL Glossario.html vuoto: i link non possono aprire la pagina HTML generata dal tool.")
     return warnings
 
 

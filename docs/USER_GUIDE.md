@@ -9,16 +9,16 @@ Glossary Linker e un'app locale per aggiungere rimandi al glossario dentro docum
 - Automatico: il termine viene linkato in tutte le occorrenze valide.
 - Manuale: ogni occorrenza viene mostrata nella revisione manuale.
 - File `.linked.tex`: copia non distruttiva del documento originale con i link inseriti.
-- Macro `\glslink{id}{testo}`: macro inserita nei documenti per creare un link leggibile verso il PDF del glossario.
+- Macro `\glslink{id}{testo}`: macro inserita nei documenti per creare un link leggibile verso l'HTML del glossario generato dal tool.
 
 ## Flusso consigliato
 
-1. Prepara il glossario se non ha ancora ID stabili.
-2. Controlla le impostazioni ambiente.
-3. Controlla le regole editoriali.
-4. Linka i documenti.
-5. Rivedi le occorrenze manuali.
-6. Salva i file prodotti.
+- Prepara il glossario se non ha ancora ID stabili.
+- Controlla le impostazioni ambiente.
+- Controlla le regole editoriali.
+- Linka i documenti.
+- Rivedi le occorrenze manuali.
+- Salva i file prodotti.
 
 ## Primo avvio
 
@@ -54,18 +54,19 @@ Alla fine scegli:
 
 - nuovo file `.tex`;
 - sovrascrittura del file sorgente;
-- salvataggio e compilazione PDF.
+- salvataggio e compilazione PDF, se vuoi produrre anche il PDF del glossario.
 
 Quando una voce viene rilevata per errore, togli la spunta `Incluso`. Questo evita che finisca nella lista usata dal linker. Se una definizione e sbagliata o troppo sporca, correggila nel campo della tabella prima di salvare.
 
 Il formato consigliato per il futuro e:
 
 ```tex
+\providecommand{\glossaryentry}[2]{\subsection{#2}\hypertarget{gls:#1}{}\label{gls:#1}}
 \glossaryentry{id-stabile}{Termine visibile}
 Definizione della voce.
 ```
 
-L'ID deve essere stabile: se lo cambi, cambiano anche gli anchor usati dai link nei documenti.
+L'ID deve essere stabile: se lo cambi, cambiano anche gli anchor usati dai link nei documenti. L'HTML generato dal tool crea una sezione con `id="gls-id"` per ogni voce rilevata.
 
 ## Linkare documenti
 
@@ -75,8 +76,17 @@ Nella pagina `Glossario e Regole` imposta:
 
 - root progetto;
 - path del glossario `.tex`;
-- URL finale del PDF del glossario;
-- formato anchor.
+- URL usato nei documenti per aprire il glossario HTML.
+
+Il parsing `.tex -> .html` e obbligatorio: quando aggiorni le voci o avvii
+l'elaborazione, il tool parsa il glossario, salva la lista locale delle entry e
+genera l'HTML con una sezione per ogni voce. I link inseriti nei documenti
+puntano sempre a `URL#gls-id`.
+
+Per lavorare in locale lascia `http://127.0.0.1:8765/glossary-html`: il link
+apre la pagina HTML servita dall'app mentre il server e in esecuzione. Per Pages
+usa l'URL remoto dello stesso HTML generato dal tool, per esempio
+`https://nome-org.github.io/.../Glossario.html`.
 
 Seleziona i documenti manualmente o scansiona una cartella. I file dentro la root vengono mostrati come path relativi.
 
@@ -125,6 +135,7 @@ La sezione `Ambiente locale` contiene solo impostazioni del tuo computer:
 - compilatore preferito;
 - timeout;
 - cartella temporanea;
+- pulizia dei file temporanei di compilazione;
 - porta locale;
 - browser preferito.
 
@@ -137,12 +148,39 @@ La sezione `Regole editoriali` contiene le regole condivise:
 
 La sezione `Verifica ambiente` controlla se i binari configurati sono raggiungibili.
 
+## Documenti di prova
+
+Per ripristinare le fixture dentro `vendor/` senza cancellare gli ZIP:
+
+```bash
+scripts/reset_test_documents.py
+```
+
+Su Windows:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\reset_test_documents.py
+```
+
+Lo script rimuove e riestrae `vendor/documentazione-source` e
+`vendor/documentazione-glossario` dagli ZIP omonimi senza modificare i file
+estratti. Se il glossario originale non crea ancora `\hypertarget{gls:id}{}`,
+usa `Formatta glossario .tex`: la normalizzazione deve essere generata dal tool,
+non dallo script di reset. Lo stesso salvataggio produce anche `Glossario.html`
+con anchor per ogni entry.
+
+Per eliminare solo gli artifact di compilazione LaTeX:
+
+```bash
+scripts/clean_latex_artifacts.py .
+```
+
 ## Note importanti
 
 - L'app non installa TeX Live o MiKTeX.
 - L'app non corregge asset mancanti nei documenti.
 - L'app non garantisce correttezza semantica automatica: usa la revisione manuale per termini ambigui.
-- I link al glossario funzionano bene solo se il PDF del glossario espone anchor stabili coerenti con gli ID.
+- I link al glossario puntano all'HTML generato dal tool. Assicurati che l'URL configurato sia raggiungibile e che l'HTML sia stato rigenerato dopo ogni modifica al glossario `.tex`.
 - Prima di sovrascrivere sorgenti importanti, controlla sempre i risultati.
 
 ## Problemi comuni
@@ -162,9 +200,9 @@ Controlla il log mostrato dall'app. Gli errori piu comuni sono:
 
 Glossary Linker mostra il log, ma non modifica asset o path del progetto.
 
-### Il link apre il PDF ma non arriva alla voce giusta
+### Il link apre il glossario ma non arriva alla voce giusta
 
-Controlla `Formato anchor` e assicurati che il glossario generi anchor compatibili, per esempio `gls:id-stabile`. Il PDF deve contenere destinazioni coerenti con gli ID delle voci.
+Rigenera le voci dal glossario `.tex` e controlla che l'HTML contenga un elemento con `id="gls-id"` per la voce interessata. In locale verifica che l'app sia aperta su `http://127.0.0.1:8765`; in remoto verifica che l'HTML pubblicato su Pages sia aggiornato.
 
 ### Non so se un termine deve essere automatico o manuale
 

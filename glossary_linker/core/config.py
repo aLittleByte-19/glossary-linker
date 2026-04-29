@@ -10,8 +10,11 @@ import yaml
 @dataclass(slots=True)
 class EditorialConfig:
     glossary_pdf_url: str = ""
+    glossary_html_url: str = ""
+    glossary_link_target: str = "html"
     glossary_path: str = "Glossario.tex"
     anchor_format: str = "#nameddest=gls:{id}"
+    html_anchor_format: str = "#gls-{id}"
     glossary_detection: str = "auto"
     excluded_entry_ids: list[str] = field(default_factory=list)
     exclude_file_patterns: list[str] = field(default_factory=lambda: [
@@ -73,6 +76,7 @@ class LocalConfig:
     local_server_port: int = 8765
     auto_open_pdf: bool = True
     clean_aux_files: bool = True
+    clean_compile_artifacts: bool = True
     log_level: str = "INFO"
     preferred_browser: str = ""
 

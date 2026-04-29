@@ -16,15 +16,14 @@
   <section class="panel home-card" aria-labelledby="operation-title">
     <div class="section-head">
       <div>
-        <p class="section-kicker">Scegli il flusso</p>
+        <p class="section-kicker">Scegli un'operazione</p>
         <h1 id="operation-title">Cosa vuoi fare?</h1>
-        <p class="muted">Ogni flusso ti accompagna fino a un punto di conferma. I sorgenti vengono sovrascritti solo se lo scegli esplicitamente alla fine.</p>
+        <p class="muted">Le operazioni sono indipendenti e arrivano a un punto di conferma. I sorgenti vengono sovrascritti solo se lo scegli esplicitamente alla fine.</p>
       </div>
     </div>
     <form method="post" action="{{ url_for('set_operation') }}" class="operation-grid">
       <label class="operation-card">
         <input type="radio" name="operation" value="link-documents" {% if selected_operation == "link-documents" %}checked{% endif %}>
-        <span class="operation-icon" aria-hidden="true">01</span>
         <span>
           <strong>Linka documenti</strong>
           <small>Per scegliere uno o più file <code>.tex</code>, generare copie <code>.linked.tex</code> e rivedere solo i termini manuali.</small>
@@ -32,7 +31,6 @@
       </label>
       <label class="operation-card">
         <input type="radio" name="operation" value="update-glossary" {% if selected_operation == "update-glossary" %}checked{% endif %}>
-        <span class="operation-icon" aria-hidden="true">02</span>
         <span>
           <strong>Aggiorna per nuove voci</strong>
           <small>Per scansionare i documenti della root e applicare soltanto gli ID nuovi o indicati.</small>
@@ -40,14 +38,13 @@
       </label>
       <label class="operation-card">
         <input type="radio" name="operation" value="format-glossary" {% if selected_operation == "format-glossary" %}checked{% endif %}>
-        <span class="operation-icon" aria-hidden="true">03</span>
         <span>
           <strong>Formatta glossario .tex</strong>
           <small>Per partire da sezioni LaTeX, confermare le voci rilevate e salvare un glossario con ID stabili.</small>
         </span>
       </label>
       <div class="home-actions">
-        <p class="muted">Il flusso selezionato è salvato come preferenza locale per il prossimo avvio.</p>
+        <p class="muted">L'operazione selezionata è salvata come preferenza locale per il prossimo avvio.</p>
         <button class="primary" type="submit">Continua</button>
       </div>
     </form>
@@ -82,8 +79,8 @@
           <dd><span class="status-dot {% if home_status.glossary_ok %}ok{% else %}warn{% endif %}"></span><code title="{{ home_status.glossary_label }}">{{ home_status.glossary_label }}</code></dd>
         </div>
         <div>
-          <dt>PDF pubblico</dt>
-          <dd><span class="status-dot {% if home_status.glossary_pdf_ok %}ok{% else %}warn{% endif %}"></span>{% if home_status.glossary_pdf_ok %}URL configurato{% else %}URL mancante{% endif %}</dd>
+          <dt>Glossario HTML</dt>
+          <dd><span class="status-dot {% if home_status.glossary_html_ok %}ok{% else %}warn{% endif %}"></span>{% if home_status.glossary_html_ok %}URL configurato{% else %}URL locale automatico{% endif %}</dd>
         </div>
       </dl>
       <div class="setup-metrics">

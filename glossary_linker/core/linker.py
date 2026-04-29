@@ -146,7 +146,10 @@ def save_report_markdown(report: ProcessingReport, path: Path) -> None:
 
 def ensure_glslink_macro(text: str, config: EditorialConfig) -> str:
     macro = _glslink_macro(config)
-    existing_app_macro = re.compile(r"\\providecommand\{\\glslink\}\[2\]\{\\href\{.*?\}\{#2(?:\\textsuperscript\{\\scriptsize G\})?\}\}", re.DOTALL)
+    existing_app_macro = re.compile(
+        r"\\providecommand\{\\glslink\}\[2\]\{\\href\{.*?\}\{(?:\\underline\{#2\}|#2)(?:\\textsuperscript\{\\scriptsize G\})?\}\}",
+        re.DOTALL,
+    )
     if existing_app_macro.search(text):
         return existing_app_macro.sub(lambda _match: macro, text, count=1)
     if r"\newcommand{\glslink}" in text or r"\providecommand{\glslink}" in text:
@@ -159,15 +162,31 @@ def ensure_glslink_macro(text: str, config: EditorialConfig) -> str:
 
 def _glslink_macro(config: EditorialConfig) -> str:
     target = _latex_href_target(config)
-    return rf"\providecommand{{\glslink}}[2]{{\href{{{target}}}{{#2\textsuperscript{{\scriptsize G}}}}}}"
+    return rf"\providecommand{{\glslink}}[2]{{\href{{{target}}}{{\underline{{#2}}\textsuperscript{{\scriptsize G}}}}}}"
 
 
 def _latex_href_target(config: EditorialConfig) -> str:
-    anchor = config.anchor_format or "#gls:{id}"
+    target_url = _target_url(config)
+    anchor = _effective_anchor_format(config, target_url)
     if "{id}" not in anchor:
         anchor = anchor.rstrip("#") + "{id}"
-    url = (config.glossary_pdf_url or "").rstrip()
-    return (url + anchor).replace("#", r"\#").replace("{id}", "#1")
+    return (target_url + anchor).replace("#", r"\#").replace("{id}", "#1")
+
+
+def _target_url(config: EditorialConfig) -> str:
+    if config.glossary_link_target == "html":
+        return (config.glossary_html_url or "").strip().rstrip()
+    return (config.glossary_pdf_url or "").rstrip()
+
+
+def _effective_anchor_format(config: EditorialConfig, target_url: str) -> str:
+    if config.glossary_link_target == "html":
+        return config.html_anchor_format or "#gls-{id}"
+    anchor = config.anchor_format or "#gls:{id}"
+    url = target_url.strip().lower()
+    if not url.startswith(("http://", "https://")) and anchor.startswith("#nameddest="):
+        return "#" + anchor.removeprefix("#nameddest=")
+    return anchor
 
 
 def _find_matches(text: str, entries: list[GlossaryEntry], config: EditorialConfig) -> list[dict]:

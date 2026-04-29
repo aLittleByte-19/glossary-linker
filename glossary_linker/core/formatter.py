@@ -5,7 +5,7 @@ import re
 from .text import parse_braced_argument, slugify, strip_latex
 
 
-GLOSSARYENTRY_MACRO = r"\providecommand{\glossaryentry}[2]{\subsection{#2}\label{gls:#1}}"
+GLOSSARYENTRY_MACRO = r"\providecommand{\glossaryentry}[2]{\subsection{#2}\hypertarget{gls:#1}{}\label{gls:#1}}"
 
 
 def format_glossary_text(text: str) -> str:
@@ -13,6 +13,8 @@ def format_glossary_text(text: str) -> str:
     normalized = _replace_subsections_with_entries(text)
     if r"\newcommand{\glossaryentry}" not in normalized and r"\providecommand{\glossaryentry}" not in normalized:
         normalized = _insert_macro(normalized, GLOSSARYENTRY_MACRO)
+    else:
+        normalized = _upgrade_app_macro(normalized)
     return normalized
 
 
@@ -43,3 +45,10 @@ def _insert_macro(text: str, macro: str) -> str:
     if document_start >= 0:
         return text[:document_start].rstrip() + "\n\n" + macro + "\n\n" + text[document_start:]
     return macro + "\n\n" + text
+
+
+def _upgrade_app_macro(text: str) -> str:
+    old_macro = re.compile(
+        r"\\providecommand\{\\glossaryentry\}\[2\]\{\\subsection\{#2\}\\label\{gls:#1\}\}"
+    )
+    return old_macro.sub(lambda _match: GLOSSARYENTRY_MACRO, text, count=1)

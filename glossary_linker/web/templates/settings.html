@@ -32,29 +32,34 @@
         <span>Cerca impostazioni</span>
         <input type="search" data-settings-search placeholder="Ambiente, regole, verifica...">
       </label>
-      <div class="settings-nav-group">
-        <span>Generale</span>
-        <a href="{{ url_for('settings', tab='environment') }}" class="{% if tab == 'environment' %}active{% endif %}">Ambiente locale</a>
-        <a href="{{ url_for('settings', tab='rules') }}" class="{% if tab == 'rules' %}active{% endif %}">Regole editoriali</a>
-        <a href="{{ url_for('settings', tab='check') }}" class="{% if tab == 'check' %}active{% endif %}">Verifica ambiente</a>
-      </div>
-      {% if tab == "environment" %}
-        <div class="settings-nav-group">
-          <span>Ambiente locale</span>
-          <a href="#paths">Percorsi</a>
-          <a href="#latex-tools">Strumenti LaTeX</a>
-          <a href="#compile-settings">Compilazione</a>
-          <a href="#local-behavior">Comportamento</a>
+      <nav class="settings-nav" data-scrollspy>
+        <span class="nav-label">Generale</span>
+        <div class="settings-nav-section">
+          <a class="settings-main-link {% if tab == 'environment' %}active{% endif %}" href="{{ url_for('settings', tab='environment') }}">Ambiente locale</a>
+          {% if tab == "environment" %}
+            <div class="settings-subnav">
+              <a href="#paths" data-scroll-link>Percorsi</a>
+              <a href="#latex-tools" data-scroll-link>Strumenti LaTeX</a>
+              <a href="#compile-settings" data-scroll-link>Compilazione</a>
+              <a href="#local-behavior" data-scroll-link>Comportamento</a>
+            </div>
+          {% endif %}
         </div>
-      {% elif tab == "rules" %}
-        <div class="settings-nav-group">
-          <span>Regole editoriali</span>
-          <a href="#rule-sections">Sezioni ignorate</a>
-          <a href="#rule-files">File esclusi</a>
-          <a href="#rule-envs">Ambienti</a>
-          <a href="#rule-commands">Comandi</a>
+        <div class="settings-nav-section">
+          <a class="settings-main-link {% if tab == 'rules' %}active{% endif %}" href="{{ url_for('settings', tab='rules') }}">Regole editoriali</a>
+          {% if tab == "rules" %}
+            <div class="settings-subnav">
+              <a href="#rule-sections" data-scroll-link>Sezioni ignorate</a>
+              <a href="#rule-files" data-scroll-link>File esclusi</a>
+              <a href="#rule-envs" data-scroll-link>Ambienti</a>
+              <a href="#rule-commands" data-scroll-link>Comandi</a>
+            </div>
+          {% endif %}
         </div>
-      {% endif %}
+        <div class="settings-nav-section">
+          <a class="settings-main-link {% if tab == 'check' %}active{% endif %}" href="{{ url_for('settings', tab='check') }}">Verifica ambiente</a>
+        </div>
+      </nav>
     </aside>
 
     <div class="settings-content">
@@ -213,6 +218,7 @@
             </div>
             <label class="check"><input type="checkbox" name="auto_open_pdf" {% if local.auto_open_pdf %}checked{% endif %}> Apri PDF dopo compilazione</label>
             <label class="check"><input type="checkbox" name="clean_aux_files" {% if local.clean_aux_files %}checked{% endif %}> Pulisci file ausiliari prima di compilare</label>
+            <label class="check"><input type="checkbox" name="clean_compile_artifacts" {% if local.clean_compile_artifacts %}checked{% endif %}> Elimina file temporanei dopo compilazione</label>
           </section>
 
           <div class="actions"><button class="primary" type="submit">Salva impostazioni</button></div>

@@ -4,7 +4,7 @@ entries:
   definition: Metrica monitorata dall'Analista Dati per osservare la precisione del
     sistema nello smistamento e riconoscimento automatico.
   aliases: []
-  mode: manual
+  mode: automatic
 - id: agile-scrum
   term: Agile SCRUM
   definition: Il metodo di lavoro usato dal team per sviluppare il software, basato
@@ -49,7 +49,7 @@ entries:
   definition: Figura responsabile della configurazione dell'ambiente standalone, della
     gestione dei privilegi degli account e della definizione delle policy globali.
   aliases: []
-  mode: manual
+  mode: automatic
 - id: analisi-dinamica
   term: Analisi Dinamica
   definition: Attività di verifica del codice eseguita durante la sua esecuzione.
@@ -64,7 +64,7 @@ entries:
   term: Analista
   definition: Ruolo incaricato dell'analisi dei requisiti e del dominio.
   aliases: []
-  mode: manual
+  mode: automatic
 - id: analista-dati
   term: Analista Dati
   definition: Figura che supervisiona l'efficienza del sistema, monitorando le performance
@@ -90,7 +90,7 @@ entries:
   definition: Ruolo ricoperto da un utente o da un sistema esterno che interagisce
     con l'applicazione (es. Amministratore, Redattore, Operatore CdL).
   aliases: []
-  mode: manual
+  mode: automatic
 - id: audit-trail
   term: Audit Trail
   definition: Un registro che tiene traccia di tutte le operazioni fatte nel sistema,
@@ -467,7 +467,7 @@ entries:
     il modulo AI Assistant, responsabile della calibrazione del tono e della validazione
     dei contenuti.
   aliases: []
-  mode: manual
+  mode: automatic
 - id: repository-documentale
   term: Repository Documentale
   definition: Un archivio digitale dove vengono caricati e organizzati tutti i documenti
@@ -480,6 +480,7 @@ entries:
     e necessità per il funzionamento del prodotto.
   aliases:
   - Requisito
+  - Obbligatorio, Desiderabile, Opzionale
   - Obbligatorio
   - Desiderabile
   - Opzionale

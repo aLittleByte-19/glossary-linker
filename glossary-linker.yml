@@ -1,6 +1,9 @@
 glossary_pdf_url: /Users/leonardo/Desktop/git_projects.nosync/glossary-linker/vendor/documentazione-glossario/RTB/Glossario/Glossario.pdf
-glossary_path: /Users/leonardo/Desktop/git_projects.nosync/glossary-linker/vendor/documentazione-glossario/RTB/Glossario/Glossario.tex
+glossary_html_url: http://127.0.0.1:8765/glossary-html
+glossary_link_target: html
+glossary_path: /Users/leonardo/Desktop/git_projects.nosync/glossary-linker/vendor/documentazione-glossario/RTB/Glossario/Glossario.formatted.tex
 anchor_format: '#nameddest=gls:{id}'
+html_anchor_format: '#gls-{id}'
 glossary_detection: auto
 excluded_entry_ids: []
 exclude_file_patterns:

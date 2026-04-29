@@ -26,7 +26,7 @@ def parse_glossary_text(text: str, config: EditorialConfig | None = None) -> lis
     elif mode == "subsection":
         entries = _parse_subsection_entries(source)
     else:
-        entries = structured if structured else _parse_subsection_entries(source)
+        entries = structured + _parse_subsection_entries(source)
 
     entries = _deduplicate_entries(entries)
     if config:

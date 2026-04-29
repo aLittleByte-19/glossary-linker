@@ -16,16 +16,44 @@ Accuratezza e accuratezza.
 """,
         encoding="utf-8",
     )
-    config = EditorialConfig(glossary_pdf_url="https://example.test/Glossario.pdf")
+    config = EditorialConfig(glossary_html_url="http://127.0.0.1:8765/glossary-html")
     entries = [GlossaryEntry("accuratezza", "Accuratezza")]
 
     result = link_file(tex, entries, config)
 
     assert result.automatic_links == 2
     assert r"\providecommand{\glslink}" in result.linked_text
-    assert r"https://example.test/Glossario.pdf\#nameddest=gls:#1" in result.linked_text
-    assert r"#2\textsuperscript{\scriptsize G}" in result.linked_text
+    assert r"http://127.0.0.1:8765/glossary-html\#gls-#1" in result.linked_text
+    assert r"\underline{#2}\textsuperscript{\scriptsize G}" in result.linked_text
     assert result.linked_text.count(r"\glslink{accuratezza}") == 2
+
+
+def test_local_pdf_links_use_direct_named_destination_for_gotor(tmp_path: Path):
+    tex = tmp_path / "doc.tex"
+    pdf = tmp_path / "Glossario.pdf"
+    tex.write_text(r"\begin{document}Accuratezza.\end{document}", encoding="utf-8")
+    pdf.write_text("placeholder", encoding="utf-8")
+    config = EditorialConfig(glossary_link_target="pdf", glossary_pdf_url=str(pdf), anchor_format="#nameddest=gls:{id}")
+    entries = [GlossaryEntry("accuratezza", "Accuratezza")]
+
+    result = link_file(tex, entries, config)
+
+    assert rf"{pdf}\#gls:#1" in result.linked_text
+    assert "nameddest" not in result.linked_text
+
+
+def test_html_links_use_configured_http_glossary_url(tmp_path: Path):
+    tex = tmp_path / "doc.tex"
+    tex.write_text(r"\begin{document}Accuratezza.\end{document}", encoding="utf-8")
+    config = EditorialConfig(
+        glossary_html_url="http://127.0.0.1:8765/glossary-html",
+        html_anchor_format="#gls-{id}",
+    )
+    entries = [GlossaryEntry("accuratezza", "Accuratezza")]
+
+    result = link_file(tex, entries, config)
+
+    assert r"\href{http://127.0.0.1:8765/glossary-html\#gls-#1}" in result.linked_text
 
 
 def test_link_file_updates_previous_app_managed_macro(tmp_path: Path):
@@ -39,14 +67,14 @@ Accuratezza.
 """,
         encoding="utf-8",
     )
-    config = EditorialConfig(glossary_pdf_url="https://example.test/Glossario.pdf")
+    config = EditorialConfig(glossary_link_target="pdf", glossary_pdf_url="https://example.test/Glossario.pdf")
     entries = [GlossaryEntry("accuratezza", "Accuratezza")]
 
     result = link_file(tex, entries, config)
 
     assert result.linked_text.count(r"\providecommand{\glslink}") == 1
     assert r"https://example.test/Glossario.pdf\#nameddest=gls:#1" in result.linked_text
-    assert r"#2\textsuperscript{\scriptsize G}" in result.linked_text
+    assert r"\underline{#2}\textsuperscript{\scriptsize G}" in result.linked_text
 
 
 def test_link_file_ignores_existing_links_and_verbatim(tmp_path: Path):

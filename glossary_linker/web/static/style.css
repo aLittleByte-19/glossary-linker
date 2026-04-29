@@ -16,6 +16,7 @@
   --info: #315f8c;
   --semantic-mark: #fff1a8;
   --shadow: 0 14px 40px rgb(0 0 0 / 7%);
+  --anchor-offset: 154px;
 }
 
 * {
@@ -24,6 +25,7 @@
 
 html {
   min-width: 320px;
+  scroll-padding-top: var(--anchor-offset);
 }
 
 body {
@@ -113,6 +115,7 @@ a {
   border: 1px solid var(--line);
   border-radius: 8px;
   text-decoration: none;
+  transition: background 140ms ease, border-color 140ms ease, color 140ms ease, outline-color 140ms ease;
 }
 
 .icon-link:hover,
@@ -287,8 +290,8 @@ p {
   position: sticky;
   top: 96px;
   display: grid;
-  gap: 12px;
-  padding: 10px;
+  gap: 14px;
+  padding: 14px;
   background: #f1f1ef;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -313,33 +316,65 @@ p {
   border-radius: 4px;
 }
 
-.settings-nav-group {
+.settings-nav {
   display: grid;
-  gap: 2px;
+  gap: 4px;
 }
 
-.settings-nav-group > span {
-  padding: 8px 10px 4px;
+.settings-nav .nav-label {
+  padding: 6px 10px 4px;
   color: var(--muted);
   font-size: 0.74rem;
   font-weight: 800;
   text-transform: uppercase;
 }
 
+.settings-nav-section {
+  display: grid;
+  gap: 2px;
+}
+
 .settings-sidebar a {
-  padding: 7px 10px 7px 12px;
+  padding: 8px 10px 8px 12px;
   color: var(--muted);
-  border-left: 3px solid transparent;
-  border-radius: 3px;
+  border-radius: 5px;
   text-decoration: none;
 }
 
+.settings-main-link {
+  font-weight: 760;
+}
+
+.settings-subnav {
+  display: grid;
+  gap: 1px;
+  margin: 2px 0 8px 14px;
+  padding-left: 10px;
+}
+
+.settings-subnav a {
+  padding: 6px 8px 6px 11px;
+  font-size: 0.92rem;
+}
+
 .settings-sidebar a:hover,
-.settings-sidebar a:focus-visible,
-.settings-sidebar a.active {
+.settings-sidebar a:focus-visible {
   color: var(--ink);
   background: #ffffff;
-  border-left-color: var(--ink);
+  outline: none;
+}
+
+.settings-sidebar .settings-main-link.active,
+.settings-sidebar .settings-nav-section.active-section > .settings-main-link {
+  color: var(--ink);
+  font-weight: 850;
+  background: #e1e1df;
+  outline: none;
+}
+
+.settings-sidebar .settings-subnav a.active {
+  color: var(--ink);
+  background: #e1e1df;
   outline: none;
 }
 
@@ -366,7 +401,7 @@ p {
 
 .settings-panel .form-section,
 .settings-panel .rule-editor {
-  scroll-margin-top: 96px;
+  scroll-margin-top: var(--anchor-offset);
 }
 
 .choice-list {
@@ -587,7 +622,7 @@ p {
 .operation-card,
 .choice {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
   gap: 12px;
   min-height: 126px;
@@ -628,7 +663,8 @@ p {
   opacity: 0;
 }
 
-.operation-card > span:last-child {
+.operation-card > span:last-child,
+.operation-card > span:first-of-type {
   display: grid;
   gap: 8px;
 }
@@ -762,19 +798,23 @@ button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   min-height: 42px;
   padding: 9px 14px;
   color: var(--ink);
+  font-weight: 680;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 7px;
   text-decoration: none;
   white-space: nowrap;
+  transition: background 140ms ease, border-color 140ms ease, color 140ms ease, transform 140ms ease;
 }
 
 .button-link:hover,
 .button-link:focus-visible {
   color: var(--accent);
+  background: #f7f7f7;
   border-color: var(--accent);
   outline: 3px solid var(--accent-soft);
 }
@@ -880,8 +920,10 @@ button {
   min-height: 42px;
   padding: 9px 14px;
   color: var(--ink);
+  font-weight: 680;
   background: var(--surface);
   cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
 }
 
 button:hover,
@@ -1448,7 +1490,7 @@ pre {
 
 .doc-toc ol {
   display: grid;
-  gap: 4px;
+  gap: 2px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -1456,20 +1498,43 @@ pre {
 
 .doc-toc a {
   display: block;
-  padding: 5px 0;
+  padding: 6px 8px 6px 10px;
   color: var(--muted);
   font-size: 0.9rem;
+  border-radius: 5px;
   text-decoration: none;
 }
 
 .doc-toc a:hover,
 .doc-toc a:focus-visible {
   color: var(--ink);
+  background: #ffffff;
   outline: none;
 }
 
-.doc-toc .level-3 {
-  padding-left: 12px;
+.doc-toc .level-2 > a.active,
+.doc-toc .active-section > a {
+  color: var(--ink);
+  font-weight: 850;
+  background: #e1e1df;
+  outline: none;
+}
+
+.doc-toc .level-3 a.active {
+  color: var(--ink);
+  background: #e1e1df;
+  outline: none;
+}
+
+.doc-toc .level-2 > ol {
+  margin: 2px 0 8px 14px;
+  padding-left: 10px;
+}
+
+.doc-toc .level-3 a {
+  padding-top: 5px;
+  padding-bottom: 5px;
+  font-size: 0.86rem;
 }
 
 .doc-page {
@@ -1482,6 +1547,7 @@ pre {
 .doc-page h1,
 .doc-page h2,
 .doc-page h3 {
+  scroll-margin-top: var(--anchor-offset);
   margin-top: 16px;
 }
 
