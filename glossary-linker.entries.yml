@@ -4,7 +4,7 @@ entries:
   definition: Metrica monitorata dall'Analista Dati per osservare la precisione del
     sistema nello smistamento e riconoscimento automatico.
   aliases: []
-  mode: automatic
+  mode: manual
 - id: agile-scrum
   term: Agile SCRUM
   definition: Il metodo di lavoro usato dal team per sviluppare il software, basato

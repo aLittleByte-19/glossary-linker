@@ -57,7 +57,7 @@ if [[ ! -f glossary-linker.local.yml && -f glossary-linker.local.example.yml ]];
   cp glossary-linker.local.example.yml glossary-linker.local.yml
 fi
 
-chmod +x scripts/clean_latex_artifacts.py scripts/reset_test_documents.py scripts/refresh_vendor_fixtures.py
+chmod +x scripts/clean_latex_artifacts.py
 
 cat <<EOF
 
@@ -73,6 +73,5 @@ Nota: TeX Live/MiKTeX non viene installato da questo script. Configura latexmk
 o il compilatore LaTeX locale dalle Impostazioni dell'app.
 
 Utility:
-  scripts/reset_test_documents.py --dry-run
   scripts/clean_latex_artifacts.py --dry-run .
 EOF

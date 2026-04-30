@@ -174,19 +174,11 @@ def _latex_href_target(config: EditorialConfig) -> str:
 
 
 def _target_url(config: EditorialConfig) -> str:
-    if config.glossary_link_target == "html":
-        return (config.glossary_html_url or "").strip().rstrip()
-    return (config.glossary_pdf_url or "").rstrip()
+    return (config.glossary_html_url or "").strip().rstrip()
 
 
 def _effective_anchor_format(config: EditorialConfig, target_url: str) -> str:
-    if config.glossary_link_target == "html":
-        return config.html_anchor_format or "#gls-{id}"
-    anchor = config.anchor_format or "#gls:{id}"
-    url = target_url.strip().lower()
-    if not url.startswith(("http://", "https://")) and anchor.startswith("#nameddest="):
-        return "#" + anchor.removeprefix("#nameddest=")
-    return anchor
+    return config.html_anchor_format or "#gls-{id}"
 
 
 def _find_matches(text: str, entries: list[GlossaryEntry], config: EditorialConfig) -> list[dict]:

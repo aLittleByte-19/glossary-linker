@@ -22,7 +22,6 @@ from glossary_linker.core.config import (
     save_editorial_config,
     save_local_config,
 )
-from glossary_linker.core.formatter import format_glossary_text
 from glossary_linker.core.glossary import parse_glossary_file, parse_glossary_text
 from glossary_linker.core.glossary import (
     load_entries_store,
@@ -109,7 +108,11 @@ def create_app() -> Flask:
                 log_level=request.form.get("log_level", "INFO"),
                 preferred_browser=request.form.get("preferred_browser", ""),
             )
+            config.glossary_path = request.form.get("glossary_path", config.glossary_path)
+            config.glossary_html_path = request.form.get("glossary_html_path", config.glossary_html_path)
+            config.glossary_html_url = request.form.get("glossary_html_url", config.glossary_html_url)
             save_local_config(local, LOCAL_PATH)
+            save_editorial_config(config, EDITORIAL_PATH)
             flash("Impostazioni ambiente salvate in glossary-linker.local.yml.", "success")
             return redirect(url_for("settings", tab="environment"))
         tools = test_environment(local) if tab == "check" else {}
@@ -129,6 +132,10 @@ def create_app() -> Flask:
     @app.get("/glossary-html")
     def glossary_html_page():
         config = _load_editorial()
+        local = _load_local()
+        html_path = _configured_glossary_html_path(config, local)
+        if html_path and html_path.exists():
+            return Response(html_path.read_text(encoding="utf-8"), mimetype="text/html; charset=utf-8")
         try:
             entries = _load_entries_from_config_path(config)
         except Exception:
@@ -162,9 +169,11 @@ def create_app() -> Flask:
         local = _load_local()
         config.glossary_path = payload.get("glossary_path", config.glossary_path)
         config.glossary_html_url = payload.get("glossary_html_url", config.glossary_html_url) or _local_glossary_html_url(local)
-        config.glossary_link_target = "html"
+        config.glossary_html_path = payload.get("glossary_html_path", config.glossary_html_path)
         config.html_anchor_format = payload.get("html_anchor_format", config.html_anchor_format)
-        config.glossary_detection = payload.get("glossary_detection", config.glossary_detection)
+        config.glossary_detection = _clean_detection_mode(payload.get("glossary_detection", config.glossary_detection))
+        config.glossary_custom_command = payload.get("glossary_custom_command", config.glossary_custom_command)
+        config.glossary_structure_description = payload.get("glossary_structure_description", config.glossary_structure_description)
         root = payload.get("repo_root", local.default_repo_root)
         local.default_repo_root = root or local.default_repo_root
         try:
@@ -172,14 +181,14 @@ def create_app() -> Flask:
             save_editorial_config(config, EDITORIAL_PATH)
             save_local_config(local, LOCAL_PATH)
             if not detected:
-                return jsonify({"ok": True, "stats": _entries_stats([], 0)})
+                return jsonify({"ok": True, "stats": _entries_stats([], 0), "entries": []})
             stored = [entry for entry in load_entries_store(ENTRIES_PATH) if entry.id not in set(config.excluded_entry_ids)]
             entries, new_count = merge_detected_with_store(detected, stored)
             save_entries_store(entries, ENTRIES_PATH)
             _persist_glossary_html(config, local, entries)
         except Exception as exc:
             return jsonify({"ok": False, "error": str(exc), "stats": {}}), 400
-        return jsonify({"ok": True, "stats": _entries_stats(entries, new_count)})
+        return jsonify({"ok": True, "stats": _entries_stats(entries, new_count), "entries": [_entry_payload(entry) for entry in entries]})
 
     @app.post("/wizard-state")
     def wizard_state():
@@ -230,45 +239,37 @@ def create_app() -> Flask:
             return redirect(url_for("operation"))
         config = _load_editorial()
         local = _load_local()
-        formatted_text = ""
         entries: list[GlossaryEntry] = [entry for entry in load_entries_store(ENTRIES_PATH) if entry.id not in set(config.excluded_entry_ids)]
         operation = session["operation"]
 
         if request.method == "POST":
             config.glossary_path = request.form.get("glossary_path", config.glossary_path)
             config.glossary_html_url = request.form.get("glossary_html_url", config.glossary_html_url) or _local_glossary_html_url(local)
-            config.glossary_link_target = "html"
+            config.glossary_html_path = request.form.get("glossary_html_path", config.glossary_html_path)
             config.html_anchor_format = request.form.get("html_anchor_format", config.html_anchor_format)
+            config.glossary_detection = _clean_detection_mode(request.form.get("glossary_detection", config.glossary_detection))
+            config.glossary_custom_command = request.form.get("glossary_custom_command", config.glossary_custom_command)
+            config.glossary_structure_description = request.form.get("glossary_structure_description", config.glossary_structure_description)
             _update_local_from_form(local)
             save_editorial_config(config, EDITORIAL_PATH)
             save_local_config(local, LOCAL_PATH)
             action = request.form.get("action", "preview")
 
-            glossary_text = _submitted_glossary_text()
-            if action in {"format", "save_formatted"} and glossary_text:
-                formatted_text = format_glossary_text(glossary_text)
-                entries = parse_glossary_text(formatted_text, config)
-                if action == "save_formatted":
-                    target = _path_from(config.glossary_path, local.default_repo_root)
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    target.write_text(formatted_text, encoding="utf-8")
-                    html_target = _default_glossary_html_path(target)
-                    save_glossary_html(entries, html_target)
-                    config.glossary_html_url = _local_glossary_html_url(local)
-                    save_editorial_config(config, EDITORIAL_PATH)
-                    flash(f"Glossario formattato salvato in {target}.", "success")
-                    flash(f"Glossario HTML salvato in {html_target}.", "success")
-            else:
-                entries = [entry for entry in load_entries_store(ENTRIES_PATH) if entry.id not in set(config.excluded_entry_ids)]
+            entries = [entry for entry in load_entries_store(ENTRIES_PATH) if entry.id not in set(config.excluded_entry_ids)]
 
             if action == "continue":
+                form_entries = _entries_from_form(entries) if request.form.getlist("entry_id") else []
                 detected = _load_detected_entries(config, local.default_repo_root)
                 if detected:
-                    stored = [entry for entry in load_entries_store(ENTRIES_PATH) if entry.id not in set(config.excluded_entry_ids)]
+                    stored_source = form_entries or load_entries_store(ENTRIES_PATH)
+                    stored = [entry for entry in stored_source if entry.id not in set(config.excluded_entry_ids)]
                     entries, _new_count = merge_detected_with_store(detected, stored)
                     save_entries_store(entries, ENTRIES_PATH)
                 elif not entries:
                     entries = _load_entries_from_config_path(config)
+                    save_entries_store(entries, ENTRIES_PATH)
+                elif form_entries:
+                    entries = form_entries
                     save_entries_store(entries, ENTRIES_PATH)
                 _persist_glossary_html(config, local, entries)
                 return _start_processing(config, local, entries, operation)
@@ -279,7 +280,6 @@ def create_app() -> Flask:
             local=local,
             entries=entries,
             entries_path=ENTRIES_PATH,
-            formatted_text=formatted_text,
             operation=operation,
             local_glossary_html_url=_local_glossary_html_url(local),
         )
@@ -288,59 +288,43 @@ def create_app() -> Flask:
     def format_glossary():
         config = _load_editorial()
         local = _load_local()
-        formatted_text = ""
         raw_text = ""
         entries: list[GlossaryEntry] = []
         source_path = request.form.get("source_glossary_path", config.glossary_path) if request.method == "POST" else config.glossary_path
-        output_path = request.form.get("output_path", "") if request.method == "POST" else ""
+        html_output_path = request.form.get("html_output_path", config.glossary_html_path) if request.method == "POST" else (config.glossary_html_path or _default_html_output_path(source_path, local.default_repo_root))
         if request.method == "POST":
-            config.glossary_detection = request.form.get("glossary_detection", config.glossary_detection)
+            config.glossary_path = source_path.strip() or config.glossary_path
+            config.glossary_html_path = html_output_path.strip() or _default_html_output_path(source_path, local.default_repo_root)
+            config.glossary_detection = _clean_detection_mode(request.form.get("glossary_detection", config.glossary_detection))
+            config.glossary_custom_command = request.form.get("glossary_custom_command", config.glossary_custom_command)
+            config.glossary_structure_description = request.form.get("glossary_structure_description", config.glossary_structure_description)
             save_editorial_config(config, EDITORIAL_PATH)
             action = request.form.get("action", "format")
             raw_text = request.form.get("glossary_text", "")
-            formatted_text = request.form.get("formatted_text", "")
             try:
-                glossary_text = formatted_text if action in {"save_formatted", "compile_formatted"} and formatted_text else _format_glossary_input(source_path, raw_text)
+                glossary_text = _format_glossary_input(source_path, raw_text, local.default_repo_root)
             except Exception as exc:
                 flash(str(exc), "error")
                 glossary_text = ""
             if glossary_text:
                 entries = parse_glossary_text(glossary_text, config)
-                formatted_text = format_glossary_text(glossary_text)
-                if not entries:
-                    entries = parse_glossary_text(formatted_text, EditorialConfig(glossary_detection="auto"))
-            if action in {"save_formatted", "compile_formatted"} and formatted_text:
+            if action == "save_html" and entries:
                 entries = _format_entries_from_form(entries)
                 save_entries_store(entries, ENTRIES_PATH)
-                target = _format_output_target(request.form, source_path)
-                if target is None:
-                    flash("Per sovrascrivere serve un file glossario sorgente selezionato.", "error")
-                else:
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    target.write_text(formatted_text, encoding="utf-8")
-                    html_target = _default_glossary_html_path(target)
-                    save_glossary_html(entries, html_target)
-                    config.glossary_path = str(target)
-                    config.glossary_html_url = _local_glossary_html_url(local)
-                    config.glossary_link_target = "html"
-                    save_editorial_config(config, EDITORIAL_PATH)
-                    flash(f"Glossario formattato salvato in {target}.", "success")
-                    flash(f"Glossario HTML salvato in {html_target}.", "success")
-                    if action == "compile_formatted":
-                        pdf_name = request.form.get("pdf_name") or None
-                        result = compile_tex(target, local, pdf_name)
-                        category = "success" if result.ok else "error"
-                        flash(("Compilazione riuscita: " if result.ok else "Compilazione fallita: ") + " ".join(result.command), category)
-                        if not result.ok:
-                            flash(result.output[-2000:], "error")
+                html_target = _format_html_output_target(request.form, source_path, local.default_repo_root)
+                html_target.parent.mkdir(parents=True, exist_ok=True)
+                save_glossary_html(entries, html_target)
+                config.glossary_html_path = str(html_target)
+                config.glossary_html_url = _local_glossary_html_url(local)
+                save_editorial_config(config, EDITORIAL_PATH)
+                flash(f"Glossario HTML salvato in {html_target}.", "success")
         return render_template(
             "format_glossary.html",
             config=config,
             local=local,
             raw_text=raw_text,
             source_path=source_path,
-            output_path=output_path or _default_formatted_path(source_path),
-            formatted_text=formatted_text,
+            html_output_path=html_output_path or _default_html_output_path(source_path, local.default_repo_root),
             entries=entries,
         )
 
@@ -506,30 +490,29 @@ def _home_status(local: LocalConfig, config: EditorialConfig, entries: list[Glos
     root = _path_from(local.default_repo_root or ".", ".")
     glossary_is_url = config.glossary_path.startswith(("http://", "https://"))
     glossary_path = None if glossary_is_url else _path_from(config.glossary_path, root)
+    glossary_html_path = _configured_glossary_html_path(config, local)
     manual = sum(1 for entry in entries if entry.mode == "manual")
     return {
         "root_label": str(root),
         "root_ok": root.exists() and root.is_dir(),
         "glossary_label": config.glossary_path or "Non impostato",
         "glossary_ok": glossary_is_url or bool(glossary_path and glossary_path.exists()),
-        "glossary_html_ok": bool(config.glossary_html_url.strip()),
+        "glossary_html_label": str(glossary_html_path) if glossary_html_path else (config.glossary_html_url or "Non impostato"),
+        "glossary_html_ok": bool((glossary_html_path and glossary_html_path.exists()) or config.glossary_html_url.strip()),
         "entries_total": len(entries),
         "entries_manual": manual,
         "entries_automatic": len(entries) - manual,
-        "detection_label": {
-            "auto": "Automatico",
-            "structured": "Macro strutturata",
-            "subsection": "Sezioni LaTeX",
-        }.get(config.glossary_detection, "Automatico"),
+        "detection_label": _detection_label(config),
         "rules_total": len(config.exclude_file_patterns) + len(config.ignored_environments) + len(config.ignored_commands),
     }
 
 
-def _submitted_glossary_text() -> str:
-    uploaded = request.files.get("glossary_file")
-    if uploaded and uploaded.filename:
-        return uploaded.read().decode("utf-8")
-    return request.form.get("glossary_text", "")
+def _detection_label(config: EditorialConfig) -> str:
+    if config.glossary_detection == "custom" and config.glossary_custom_command:
+        return f"\\{config.glossary_custom_command}{{Termine}}"
+    if config.glossary_detection == "subsection":
+        return r"\subsection{Termine}"
+    return "Auto"
 
 
 def _collect_markdown_headings(text: str) -> list[dict[str, str | int]]:
@@ -657,26 +640,26 @@ def _inline_markdown(text: str) -> Markup:
     return Markup(escaped)
 
 
-def _format_glossary_input(source_path: str, pasted_text: str) -> str:
+def _format_glossary_input(source_path: str, pasted_text: str, base: str | Path = ".") -> str:
     if pasted_text.strip():
         return pasted_text
     if not source_path.strip():
         return ""
-    path = _path_from(source_path, ".")
+    path = _path_from(source_path, base)
     if not path.exists():
         raise FileNotFoundError(f"Glossario sorgente non trovato: {path}")
     return path.read_text(encoding="utf-8")
 
 
-def _default_formatted_path(source_path: str) -> str:
-    if source_path.strip():
-        path = _path_from(source_path, ".")
-        return str(path.with_name(path.stem + ".formatted.tex"))
-    return str((ROOT / "Glossario.formatted.tex").resolve())
-
-
 def _default_glossary_html_path(tex_path: Path) -> Path:
     return tex_path.with_suffix(".html")
+
+
+def _default_html_output_path(source_path: str, base: str | Path = ".") -> str:
+    if source_path.strip():
+        path = _path_from(source_path, base)
+        return str(path.with_suffix(".html"))
+    return str((ROOT / "Glossario.html").resolve())
 
 
 def _local_glossary_html_url(local: LocalConfig) -> str:
@@ -684,25 +667,30 @@ def _local_glossary_html_url(local: LocalConfig) -> str:
     return f"http://127.0.0.1:{port}/glossary-html"
 
 
+def _configured_glossary_html_path(config: EditorialConfig, local: LocalConfig) -> Path | None:
+    if not config.glossary_html_path.strip():
+        return None
+    return _path_from(config.glossary_html_path, local.default_repo_root)
+
+
 def _persist_glossary_html(config: EditorialConfig, local: LocalConfig, entries: list[GlossaryEntry]) -> Path | None:
-    if not entries or config.glossary_path.startswith(("http://", "https://")):
+    if not entries:
         return None
-    glossary_path = _path_from(config.glossary_path, local.default_repo_root)
-    if not glossary_path.parent.exists():
-        return None
-    html_path = _default_glossary_html_path(glossary_path)
+    html_path = _configured_glossary_html_path(config, local)
+    if html_path is None:
+        if config.glossary_path.startswith(("http://", "https://")):
+            return None
+        glossary_path = _path_from(config.glossary_path, local.default_repo_root)
+        html_path = _default_glossary_html_path(glossary_path)
+        config.glossary_html_path = str(html_path)
+    html_path.parent.mkdir(parents=True, exist_ok=True)
     save_glossary_html(entries, html_path)
     return html_path
 
 
-def _format_output_target(form, source_path: str) -> Path | None:
-    mode = form.get("save_mode", "copy")
-    if mode == "overwrite":
-        if not source_path.strip():
-            return None
-        return _path_from(source_path, ".")
-    output_path = form.get("output_path", "").strip() or _default_formatted_path(source_path)
-    return _path_from(output_path, ".")
+def _format_html_output_target(form, source_path: str, base: str | Path = ".") -> Path:
+    output_path = form.get("html_output_path", "").strip() or _default_html_output_path(source_path, base)
+    return _path_from(output_path, base)
 
 
 def _format_entries_from_form(fallback: list[GlossaryEntry]) -> list[GlossaryEntry]:
@@ -869,7 +857,7 @@ def _entries_stats(entries: list[GlossaryEntry], new_count: int = 0) -> dict[str
 
 def _entries_config(entries: list[GlossaryEntry]) -> dict[str, dict[str, object]]:
     return {
-        entry.id: {"mode": entry.mode, "aliases": entry.aliases}
+        entry.id: {"mode": entry.mode, "aliases": entry.aliases, "definition": entry.definition}
         for entry in entries
     }
 
@@ -899,9 +887,11 @@ def _update_local_from_form(local: LocalConfig) -> None:
 def _update_config_from_payload(config: EditorialConfig, payload: dict) -> None:
     config.glossary_path = payload.get("glossary_path", config.glossary_path)
     config.glossary_html_url = payload.get("glossary_html_url", config.glossary_html_url)
-    config.glossary_link_target = "html"
+    config.glossary_html_path = payload.get("glossary_html_path", config.glossary_html_path)
     config.html_anchor_format = payload.get("html_anchor_format", config.html_anchor_format)
-    config.glossary_detection = payload.get("glossary_detection", config.glossary_detection)
+    config.glossary_detection = _clean_detection_mode(payload.get("glossary_detection", config.glossary_detection))
+    config.glossary_custom_command = payload.get("glossary_custom_command", config.glossary_custom_command)
+    config.glossary_structure_description = payload.get("glossary_structure_description", config.glossary_structure_description)
     config.exclude_file_patterns = _list_from_payload(payload, "exclude_file_patterns", config.exclude_file_patterns)
     config.ignored_environments = _list_from_payload(payload, "ignored_environments", config.ignored_environments)
     config.ignored_commands = _list_from_payload(payload, "ignored_commands", config.ignored_commands)
@@ -921,6 +911,10 @@ def _update_local_from_payload(local: LocalConfig, payload: dict) -> None:
     local.last_source_dir = payload.get("source_dir", local.last_source_dir) or local.last_source_dir
     local.last_review_order = payload.get("review_order", local.last_review_order) or local.last_review_order
     local.last_new_entry_ids = payload.get("new_entry_ids", local.last_new_entry_ids)
+
+
+def _clean_detection_mode(value: str) -> str:
+    return value if value in {"auto", "subsection", "custom"} else "auto"
 
 
 def _list_from_payload(payload: dict, name: str, fallback: list[str]) -> list[str]:
@@ -946,16 +940,17 @@ def _entries_from_form(fallback: list[GlossaryEntry], included_ids: set[str] | N
         if included_ids is not None and entry_id not in included_ids:
             continue
         base = by_id.get(entry_id, GlossaryEntry(entry_id, request.form.get(f"term_{entry_id}", entry_id)))
+        term = request.form.get(f"term_{entry_id}", base.term)
+        definition = request.form.get(f"definition_{entry_id}", base.definition)
         aliases = [item.strip() for item in request.form.get(f"aliases_{entry_id}", "").split(",") if item.strip()]
         mode = "manual" if request.form.get(f"mode_{entry_id}") == "manual" else "automatic"
-        result.append(GlossaryEntry(base.id, base.term, base.definition, aliases, mode))
+        result.append(GlossaryEntry(base.id, term, definition, aliases, mode))
     return result
 
 
 def _start_processing(config: EditorialConfig, local: LocalConfig, entries: list[GlossaryEntry], operation: str):
     root = _path_from(request.form.get("repo_root", local.default_repo_root), ".")
     excluded: list[Path] = []
-    config.glossary_link_target = "html"
     if not config.glossary_html_url.strip():
         config.glossary_html_url = _local_glossary_html_url(local)
     _persist_glossary_html(config, local, entries)

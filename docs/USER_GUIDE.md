@@ -35,48 +35,42 @@ Se non sai quale compilatore scegliere, lascia `latexmk`: di solito gestisce meg
 
 Apri `Formatta glossario .tex` dalla home.
 
-Puoi scegliere un file locale oppure incollare direttamente il contenuto LaTeX. Se scegli un file locale, l'app puo sovrascriverlo alla fine. Se incolli il contenuto, salva come nuovo file.
+Puoi scegliere un file locale oppure incollare direttamente il contenuto LaTeX. Il sorgente non viene sovrascritto: l'app genera l'HTML del glossario.
 
-Scegli il metodo di rilevamento:
+Il rilevamento operativo puo essere:
 
-- Automatico: usa `\glossaryentry{id}{Termine}` se presente, altrimenti prova con `\subsection{Termine}`.
-- Macro strutturata: legge solo `\glossaryentry{id}{Termine}`.
-- Sezioni: legge solo `\subsection{Termine}`.
+- Auto: prova a riconoscere il comando LaTeX che genera la lista piu lunga e coerente di voci.
+- Sezioni: legge `\subsection{Termine}`.
+- Comando specifico: legge un comando indicato dall'utente nel formato `\comando{Termine}`.
 
-Premi `Rileva e genera anteprima`. Controlla la tabella delle voci rilevate:
+Premi `Rileva voci`. Controlla la tabella delle voci rilevate:
 
 - lascia selezionate le voci reali;
 - togli la spunta alle righe rilevate per errore;
 - correggi la definizione se serve;
 - aggiungi alias separati da virgola.
 
-Alla fine scegli:
-
-- nuovo file `.tex`;
-- sovrascrittura del file sorgente;
-- salvataggio e compilazione PDF, se vuoi produrre anche il PDF del glossario.
+Alla fine scegli dove salvare l'HTML generato. Lo stesso path resta salvato nelle impostazioni e viene usato da `/glossary-html`.
 
 Quando una voce viene rilevata per errore, togli la spunta `Incluso`. Questo evita che finisca nella lista usata dal linker. Se una definizione e sbagliata o troppo sporca, correggila nel campo della tabella prima di salvare.
 
-Il formato consigliato per il futuro e:
+Esempio con sezioni:
 
 ```tex
-\providecommand{\glossaryentry}[2]{\subsection{#2}\hypertarget{gls:#1}{}\label{gls:#1}}
-\glossaryentry{id-stabile}{Termine visibile}
+\subsection{Termine visibile}
 Definizione della voce.
 ```
 
-L'ID deve essere stabile: se lo cambi, cambiano anche gli anchor usati dai link nei documenti. L'HTML generato dal tool crea una sezione con `id="gls-id"` per ogni voce rilevata.
+L'ID viene generato dal termine rilevato. Se cambi il termine, cambiano anche gli anchor usati dai link nei documenti. L'HTML generato dal tool crea una sezione con `id="gls-id"` per ogni voce rilevata.
 
 ## Linkare documenti
 
 Apri `Linka documenti`.
 
-Nella pagina `Glossario e Regole` imposta:
+Nella pagina `Glossario e documenti` parti dalla revisione del glossario:
 
-- root progetto;
-- path del glossario `.tex`;
 - URL usato nei documenti per aprire il glossario HTML.
+- definizioni, alias e modalità Automatico/Manuale delle voci rilevate.
 
 Il parsing `.tex -> .html` e obbligatorio: quando aggiorni le voci o avvii
 l'elaborazione, il tool parsa il glossario, salva la lista locale delle entry e
@@ -148,28 +142,9 @@ La sezione `Regole editoriali` contiene le regole condivise:
 
 La sezione `Verifica ambiente` controlla se i binari configurati sono raggiungibili.
 
-## Documenti di prova
+## Pulizia artifact LaTeX
 
-Per ripristinare le fixture dentro `vendor/` senza cancellare gli ZIP:
-
-```bash
-scripts/reset_test_documents.py
-```
-
-Su Windows:
-
-```powershell
-.\.venv\Scripts\python.exe scripts\reset_test_documents.py
-```
-
-Lo script rimuove e riestrae `vendor/documentazione-source` e
-`vendor/documentazione-glossario` dagli ZIP omonimi senza modificare i file
-estratti. Se il glossario originale non crea ancora `\hypertarget{gls:id}{}`,
-usa `Formatta glossario .tex`: la normalizzazione deve essere generata dal tool,
-non dallo script di reset. Lo stesso salvataggio produce anche `Glossario.html`
-con anchor per ogni entry.
-
-Per eliminare solo gli artifact di compilazione LaTeX:
+Per eliminare gli artifact di compilazione LaTeX in una directory:
 
 ```bash
 scripts/clean_latex_artifacts.py .
@@ -187,7 +162,7 @@ scripts/clean_latex_artifacts.py .
 
 ### Il glossario rileva una voce strana
 
-Apri `Formatta glossario .tex`, scegli un metodo di rilevamento piu esplicito e rigenera l'anteprima. Se la voce compare ancora, togli la spunta `Incluso` prima del salvataggio.
+Apri `Formatta glossario .tex`, prova il metodo `subsection` o indica il comando specifico che contiene il termine. Se la voce compare ancora, togli la spunta `Incluso` prima del salvataggio.
 
 ### La compilazione PDF fallisce
 

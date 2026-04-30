@@ -2,7 +2,7 @@
 {% block progress %}
 <nav class="workflow-progress" aria-label="Avanzamento">
   <a href="{{ url_for('operation') }}">Operazione</a>
-  <a class="active" href="{{ url_for('glossary_rules') }}">Regole</a>
+  <a class="active" href="{{ url_for('glossary_rules') }}">Glossario</a>
   <span class="disabled">Revisione</span>
   <span class="disabled">Output</span>
 </nav>
@@ -11,8 +11,8 @@
 <section class="panel">
   <div class="page-head">
     <div>
-      <h1>Glossario e Regole</h1>
-      <p>Configura le sorgenti, scegli i documenti e conferma il glossario rilevato prima di iniziare l'elaborazione.</p>
+      <h1>Glossario e documenti</h1>
+      <p>Conferma il glossario HTML, poi scegli i documenti da elaborare.</p>
     </div>
     <div class="page-actions">
       <a class="button-link" href="{{ url_for('operation') }}">Indietro</a>
@@ -35,50 +35,64 @@
     </div>
   </div>
 
-  <form method="post" enctype="multipart/form-data" class="stack" data-wizard-form>
-    <div class="form-section path-stack guided-block">
+  <form method="post" enctype="multipart/form-data" class="stack" data-wizard-form data-wizard-steps>
+    <section class="form-section guided-block glossary-review-panel" data-wizard-panel="glossary">
       <div>
         <p class="section-kicker">Passo 1</p>
-        <h2>Sorgenti</h2>
-        <p class="muted">La root progetto serve per mostrare path relativi e per scansionare i documenti. Il glossario <code>.tex</code> viene parsato dal tool per generare la pagina HTML con anchor stabili.</p>
+        <h2>Glossario HTML</h2>
+        <p class="muted">Conferma l'URL che i documenti useranno per aprire il glossario HTML.</p>
       </div>
-      <label>Root progetto
-        <span class="field-with-action wide">
-          <input id="repo_root" name="repo_root" value="{{ local.default_repo_root }}" data-glossary-source data-persist>
-          <button type="button" data-picker data-kind="directory" data-target="#repo_root">Scegli</button>
-        </span>
-      </label>
-      <label>Path glossario .tex
-        <span class="field-with-action wide">
-          <input id="glossary_path" name="glossary_path" value="{{ config.glossary_path }}" data-glossary-source data-persist>
-          <button type="button" data-picker data-kind="file" data-target="#glossary_path">Scegli</button>
-        </span>
-      </label>
-      <input type="hidden" name="glossary_link_target" value="html">
-      <input type="hidden" id="html_anchor_format" name="html_anchor_format" value="{{ config.html_anchor_format or '#gls-{id}' }}" data-glossary-source data-persist>
-    </div>
 
-    <div class="form-section guided-block">
-      <div>
-        <p class="section-kicker">Passo 2</p>
-        <h2>HTML generato dal glossario</h2>
-        <p class="muted">Il parsing <code>.tex -> .html</code> e obbligatorio: l'app genera la pagina HTML del glossario e i documenti vengono linkati alle sue anchor <code>#gls-id</code>.</p>
-      </div>
-      <label>URL usato nei documenti
+      <label>URL glossario HTML
         <input id="glossary_html_url" name="glossary_html_url" value="{{ config.glossary_html_url or local_glossary_html_url }}" placeholder="{{ local_glossary_html_url }}" data-glossary-source data-persist>
       </label>
-      <p class="muted">Per i test locali usa <code>{{ local_glossary_html_url }}</code> mentre l'app e in esecuzione. Per Pages usa l'URL remoto dello stesso HTML generato dal tool.</p>
-    </div>
+
+      <input type="hidden" name="glossary_html_path" value="{{ config.glossary_html_path }}" data-glossary-source data-persist>
+      <input type="hidden" id="glossary_path" name="glossary_path" value="{{ config.glossary_path }}" data-glossary-source data-persist>
+      <input type="hidden" name="glossary_detection" value="{{ config.glossary_detection }}" data-glossary-source data-persist>
+      <input type="hidden" name="glossary_custom_command" value="{{ config.glossary_custom_command }}" data-glossary-source data-persist>
+      <input type="hidden" name="glossary_structure_description" value="{{ config.glossary_structure_description }}" data-glossary-source data-persist>
+      <input type="hidden" id="html_anchor_format" name="html_anchor_format" value="{{ config.html_anchor_format or '#gls-{id}' }}" data-glossary-source data-persist>
+
+      <div class="stats compact-stats">
+        <div><strong>{{ entries | length }}</strong><span>Termini</span></div>
+        <div><strong>{{ entries | selectattr("mode", "equalto", "manual") | list | length }}</strong><span>Manuali</span></div>
+        <div><strong>{{ entries | rejectattr("mode", "equalto", "manual") | list | length }}</strong><span>Automatici</span></div>
+      </div>
+
+      <div class="entries-toolbar glossary-review-toolbar">
+        <div>
+          <h3>Entry rilevate</h3>
+          <p class="muted">Controlla e modifica termini, definizioni, alias e modalità dalla vista completa del glossario.</p>
+        </div>
+        <div class="actions">
+          <button type="button" data-refresh-glossary>Aggiorna dal .tex</button>
+          <a class="button-link" href="{{ url_for('entries') }}">Vista completa</a>
+        </div>
+      </div>
+      <p id="glossary_preview_status" class="status-line" aria-live="polite"></p>
+
+      <div class="flow-actions flow-actions-between">
+        <a class="button-link" href="{{ url_for('operation') }}">Torna alla home</a>
+        <button class="primary" type="button" data-wizard-next>Avanti</button>
+      </div>
+    </section>
 
     {% if operation == "link-documents" %}
-      <section class="input-group guided-block">
+      <section class="input-group guided-block" data-wizard-panel="operation" hidden>
         <div class="section-head">
           <div>
-            <p class="section-kicker">Passo 3</p>
+            <p class="section-kicker">Passo 2</p>
             <h2>Documenti da linkare</h2>
-            <p class="muted">Seleziona singoli file oppure fai rilevare i <code>.tex</code>. I file dentro la root sono mostrati come path relativi; quelli fuori root restano assoluti.</p>
+            <p class="muted">Scegli i sorgenti LaTeX che dovranno contenere link HTTP verso il glossario HTML.</p>
           </div>
         </div>
+        <label>Root progetto
+          <span class="field-with-action wide">
+            <input id="repo_root" name="repo_root" value="{{ local.default_repo_root }}" data-persist>
+            <button type="button" data-picker data-kind="directory" data-target="#repo_root">Scegli</button>
+          </span>
+        </label>
         <div class="document-source-grid">
           <section>
             <h3>Selezione manuale</h3>
@@ -117,38 +131,24 @@
         </fieldset>
       </section>
     {% else %}
-      <section class="input-group guided-block">
-        <p class="section-kicker">Passo 3</p>
+      <section class="input-group guided-block" data-wizard-panel="operation" hidden>
+        <p class="section-kicker">Passo 2</p>
         <h2>Nuove voci</h2>
         <p class="muted">Inserisci gli ID delle voci appena aggiunte al glossario. Se lasci vuoto, l'app usa tutte le voci disponibili.</p>
+        <label>Root progetto
+          <span class="field-with-action wide">
+            <input id="repo_root" name="repo_root" value="{{ local.default_repo_root }}" data-persist>
+            <button type="button" data-picker data-kind="directory" data-target="#repo_root">Scegli</button>
+          </span>
+        </label>
         <label>ID delle nuove voci, separati da virgola
           <input name="new_entry_ids" value="{{ local.last_new_entry_ids }}" placeholder="accuratezza, precisione" data-persist>
         </label>
       </section>
     {% endif %}
 
-    <section class="form-section guided-block">
-      <div>
-        <div>
-          <p class="section-kicker">Passo 4</p>
-          <h2>Glossario rilevato</h2>
-          <p class="muted">Le voci sono salvate in <code>{{ entries_path.name }}</code>. Da qui puoi solo consultare la lista usata per il linking e modificare Automatico/Manuale.</p>
-        </div>
-      </div>
-      <div class="stats compact-stats">
-        <div><strong>{{ entries | length }}</strong><span>Termini rilevati</span></div>
-        <div><strong>{{ entries | selectattr("mode", "equalto", "manual") | list | length }}</strong><span>Revisione manuale</span></div>
-        <div><strong>{{ entries | rejectattr("mode", "equalto", "manual") | list | length }}</strong><span>Automatici</span></div>
-      </div>
-      <div class="actions glossary-actions">
-        <button type="button" data-refresh-glossary>Aggiorna voci</button>
-        <a class="button-link" href="{{ url_for('entries') }}">Consulta glossario</a>
-      </div>
-      <p id="glossary_preview_status" class="status-line" aria-live="polite"></p>
-    </section>
-
-    <div class="flow-actions flow-actions-between">
-      <a class="button-link" href="{{ url_for('operation') }}">Torna alla home</a>
+    <div class="flow-actions flow-actions-between" data-wizard-operation-actions hidden>
+      <button type="button" class="button-link" data-wizard-back>Indietro</button>
       <div class="actions">
         <a class="button-link" href="{{ url_for('settings', tab='rules') }}">Controlla regole</a>
         <button class="primary" name="action" value="continue" type="submit">Avvia elaborazione</button>

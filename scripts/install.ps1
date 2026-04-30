@@ -66,5 +66,4 @@ Write-Host "Nota: TeX Live/MiKTeX non viene installato da questo script. Configu
 Write-Host "o il compilatore LaTeX locale dalle Impostazioni dell'app."
 Write-Host ""
 Write-Host "Utility:"
-Write-Host "  .\.venv\Scripts\python.exe scripts\reset_test_documents.py --dry-run"
 Write-Host "  .\.venv\Scripts\python.exe scripts\clean_latex_artifacts.py --dry-run ."

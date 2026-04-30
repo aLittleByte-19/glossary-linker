@@ -19,27 +19,18 @@ Adattamento eccessivo ai dati.
     assert "previsione" in entries[0].definition
 
 
-def test_parse_structured_entries_with_config():
-    config = EditorialConfig(entries={"accuratezza": {"mode": "manual", "aliases": ["accuracy"]}})
-    entries = parse_glossary_text(r"\glossaryentry{accuratezza}{Accuratezza} Definizione.", config)
-
-    assert entries[0].id == "accuratezza"
-    assert entries[0].mode == "manual"
-    assert entries[0].aliases == ["accuracy"]
-
-
-def test_auto_detection_prefers_structured_entries_and_ignores_macro_body():
+def test_parser_ignores_generated_macro_body_and_reads_subsections():
     text = r"""
 \providecommand{\glossaryentry}[2]{%
   \subsection{#2}
   \label{gls:#1}
 }
 \begin{document}
-\glossaryentry{agile-scrum}{Agile SCRUM}
+\subsection{Agile SCRUM}
 Il metodo di lavoro usato dal team.
 \end{document}
 """
-    entries = parse_glossary_text(text, EditorialConfig(glossary_detection="auto"))
+    entries = parse_glossary_text(text, EditorialConfig(glossary_detection="subsection"))
 
     assert [entry.id for entry in entries] == ["agile-scrum"]
     assert entries[0].term == "Agile SCRUM"
@@ -56,6 +47,35 @@ Misura quanto una previsione e corretta.
     entries = parse_glossary_text(text, EditorialConfig(glossary_detection="subsection"))
 
     assert [entry.term for entry in entries] == ["Accuratezza"]
+
+
+def test_custom_detection_uses_user_command():
+    text = r"""
+\voceGlossario{Accuratezza}
+Misura quanto una previsione e corretta.
+
+\voceGlossario{Overfitting}
+Adattamento eccessivo ai dati.
+"""
+    entries = parse_glossary_text(text, EditorialConfig(glossary_detection="custom", glossary_custom_command="voceGlossario"))
+
+    assert [entry.id for entry in entries] == ["accuratezza", "overfitting"]
+    assert "previsione" in entries[0].definition
+
+
+def test_auto_detection_prefers_long_repeated_custom_command():
+    text = r"""
+\textbf{Titolo rumoroso}
+\termineGlossario{Accuratezza}
+Misura quanto una previsione e corretta.
+\termineGlossario{Overfitting}
+Adattamento eccessivo ai dati.
+\termineGlossario{Dataset}
+Insieme di dati.
+"""
+    entries = parse_glossary_text(text, EditorialConfig(glossary_detection="auto"))
+
+    assert [entry.id for entry in entries] == ["accuratezza", "overfitting", "dataset"]
 
 
 def test_excluded_detected_entries_are_filtered_by_config():
@@ -80,15 +100,16 @@ def test_merge_detected_entries_drops_stale_stored_terms():
     assert new_count == 0
 
 
-def test_format_glossary_converts_subsections_to_structured_entries():
+def test_format_glossary_adds_stable_anchors_to_subsections():
     formatted = format_glossary_text(r"\begin{document}\subsection{Accuratezza}Testo\end{document}")
 
-    assert r"\providecommand{\glossaryentry}" in formatted
-    assert r"\hypertarget{gls:#1}{}" in formatted
-    assert r"\glossaryentry{accuratezza}{Accuratezza}" in formatted
+    assert r"\providecommand{\glossaryentry}" not in formatted
+    assert r"\subsection{Accuratezza}" in formatted
+    assert r"\hypertarget{gls:accuratezza}{}" in formatted
+    assert r"\label{gls:accuratezza}" in formatted
 
 
-def test_format_glossary_does_not_rewrite_glossaryentry_macro_body():
+def test_format_glossary_converts_old_glossaryentry_calls_to_subsections():
     text = r"""\providecommand{\glossaryentry}[2]{\subsection{#2}\label{gls:#1}}
 \begin{document}
 \glossaryentry{accuratezza}{Accuratezza}
@@ -96,9 +117,9 @@ def test_format_glossary_does_not_rewrite_glossaryentry_macro_body():
 
     formatted = format_glossary_text(text)
 
-    assert r"\glossaryentry{2}{#2}" not in formatted
-    assert r"\subsection{#2}" in formatted
-    assert r"\hypertarget{gls:#1}{}" in formatted
+    assert r"\glossaryentry{accuratezza}{Accuratezza}" not in formatted
+    assert r"\subsection{Accuratezza}" in formatted
+    assert r"\hypertarget{gls:accuratezza}{}" in formatted
 
 
 def test_parenthetical_terms_get_useful_aliases():
@@ -107,3 +128,14 @@ def test_parenthetical_terms_get_useful_aliases():
     assert entries[0].term == "Branch (Ramo)"
     assert "Branch" in entries[0].aliases
     assert "Ramo" in entries[0].aliases
+
+
+def test_generated_anchors_do_not_leak_into_definitions():
+    text = r"""
+\subsection{Capitolato}
+\hypertarget{gls:capitolato}{}\label{gls:capitolato}
+Documento tecnico.
+"""
+    entries = parse_glossary_text(text, EditorialConfig(glossary_detection="subsection"))
+
+    assert entries[0].definition == "Documento tecnico."

@@ -3,9 +3,9 @@
 <nav class="workflow-progress" aria-label="Avanzamento">
   <a class="active" href="{{ url_for('operation') }}">Operazione</a>
   {% if has_operation %}
-    <a href="{{ url_for('glossary_rules') }}">Regole</a>
+    <a href="{{ url_for('glossary_rules') }}">Glossario</a>
   {% else %}
-    <span class="disabled">Regole</span>
+    <span class="disabled">Glossario</span>
   {% endif %}
   <span class="disabled">Revisione</span>
   <span class="disabled">Output</span>
@@ -26,14 +26,14 @@
         <input type="radio" name="operation" value="link-documents" {% if selected_operation == "link-documents" %}checked{% endif %}>
         <span>
           <strong>Linka documenti</strong>
-          <small>Per scegliere uno o più file <code>.tex</code>, generare copie <code>.linked.tex</code> e rivedere solo i termini manuali.</small>
+          <small>Per generare copie <code>.linked.tex</code> con link HTTP verso il glossario HTML e rivedere solo i termini manuali.</small>
         </span>
       </label>
       <label class="operation-card">
         <input type="radio" name="operation" value="update-glossary" {% if selected_operation == "update-glossary" %}checked{% endif %}>
         <span>
           <strong>Aggiorna per nuove voci</strong>
-          <small>Per scansionare i documenti della root e applicare soltanto gli ID nuovi o indicati.</small>
+          <small>Per rileggere il glossario, scegliere gli ID nuovi o indicati e applicarli ai documenti gia linkati.</small>
         </span>
       </label>
       <label class="operation-card">
@@ -54,7 +54,7 @@
     <div class="home-intro">
       <p class="eyebrow">Wizard locale per LaTeX</p>
       <h1>Collega i termini al glossario senza perdere il controllo editoriale.</h1>
-      <p>Glossary Linker prepara link leggibili, evita le zone delicate del sorgente e ti chiede una decisione solo per i termini segnati come manuali.</p>
+      <p>Glossary Linker prepara link HTTP verso il glossario HTML, evita le zone delicate del sorgente e ti chiede una decisione solo per i termini segnati come manuali.</p>
       <div class="home-quick-actions" aria-label="Azioni rapide">
         <a class="button-link primary-link" href="{{ url_for('help_page') }}">Leggi la guida</a>
         <a class="button-link" href="{{ url_for('settings') }}">Controlla impostazioni</a>
@@ -80,7 +80,7 @@
         </div>
         <div>
           <dt>Glossario HTML</dt>
-          <dd><span class="status-dot {% if home_status.glossary_html_ok %}ok{% else %}warn{% endif %}"></span>{% if home_status.glossary_html_ok %}URL configurato{% else %}URL locale automatico{% endif %}</dd>
+          <dd><span class="status-dot {% if home_status.glossary_html_ok %}ok{% else %}warn{% endif %}"></span><code title="{{ home_status.glossary_html_label }}">{{ home_status.glossary_html_label }}</code></dd>
         </div>
       </dl>
       <div class="setup-metrics">

@@ -4,15 +4,16 @@
       <strong>{{ entry.term }}</strong>
       <code>{{ entry.id }}</code>
       <input type="hidden" name="entry_id" value="{{ entry.id }}">
+      <input type="hidden" name="term_{{ entry.id }}" value="{{ entry.term }}">
     </div>
   </td>
-  <td>{{ entry.definition or "Nessuna definizione rilevata." }}</td>
+  <td><textarea class="definition-input" name="definition_{{ entry.id }}" rows="2">{{ entry.definition }}</textarea></td>
   <td><input class="alias-input" name="aliases_{{ entry.id }}" value="{{ entry.aliases | join(', ') }}" placeholder="alias separati da virgola" aria-label="Alias per {{ entry.term }}"></td>
   <td class="mode-cell">
-    <label class="switch icon-only" title="Modalità per {{ entry.term }}">
+    <label class="switch labeled-switch" title="Modalità per {{ entry.term }}">
       <input type="checkbox" name="mode_{{ entry.id }}" value="manual" {% if entry.mode == "manual" %}checked{% endif %} data-mode-switch aria-label="Modalità per {{ entry.term }}">
       <span></span>
-      <em class="sr-only" data-mode-label>{% if entry.mode == "manual" %}Manuale{% else %}Automatico{% endif %}</em>
+      <em data-mode-label>{% if entry.mode == "manual" %}Manuale{% else %}Automatico{% endif %}</em>
     </label>
   </td>
 </tr>

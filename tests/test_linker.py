@@ -28,20 +28,6 @@ Accuratezza e accuratezza.
     assert result.linked_text.count(r"\glslink{accuratezza}") == 2
 
 
-def test_local_pdf_links_use_direct_named_destination_for_gotor(tmp_path: Path):
-    tex = tmp_path / "doc.tex"
-    pdf = tmp_path / "Glossario.pdf"
-    tex.write_text(r"\begin{document}Accuratezza.\end{document}", encoding="utf-8")
-    pdf.write_text("placeholder", encoding="utf-8")
-    config = EditorialConfig(glossary_link_target="pdf", glossary_pdf_url=str(pdf), anchor_format="#nameddest=gls:{id}")
-    entries = [GlossaryEntry("accuratezza", "Accuratezza")]
-
-    result = link_file(tex, entries, config)
-
-    assert rf"{pdf}\#gls:#1" in result.linked_text
-    assert "nameddest" not in result.linked_text
-
-
 def test_html_links_use_configured_http_glossary_url(tmp_path: Path):
     tex = tmp_path / "doc.tex"
     tex.write_text(r"\begin{document}Accuratezza.\end{document}", encoding="utf-8")
@@ -60,20 +46,20 @@ def test_link_file_updates_previous_app_managed_macro(tmp_path: Path):
     tex = tmp_path / "doc.tex"
     tex.write_text(
         r"""\documentclass{article}
-\providecommand{\glslink}[2]{\href{https://old.test/Glossario.pdf\#nameddest=gls:#1}{#2}}
+\providecommand{\glslink}[2]{\href{https://old.test/Glossario.html\#gls-#1}{#2}}
 \begin{document}
 Accuratezza.
 \end{document}
 """,
         encoding="utf-8",
     )
-    config = EditorialConfig(glossary_link_target="pdf", glossary_pdf_url="https://example.test/Glossario.pdf")
+    config = EditorialConfig(glossary_html_url="https://docs.example.test/Glossario.html")
     entries = [GlossaryEntry("accuratezza", "Accuratezza")]
 
     result = link_file(tex, entries, config)
 
     assert result.linked_text.count(r"\providecommand{\glslink}") == 1
-    assert r"https://example.test/Glossario.pdf\#nameddest=gls:#1" in result.linked_text
+    assert r"https://docs.example.test/Glossario.html\#gls-#1" in result.linked_text
     assert r"\underline{#2}\textsuperscript{\scriptsize G}" in result.linked_text
 
 
@@ -91,7 +77,7 @@ Accuratezza
 """,
         encoding="utf-8",
     )
-    config = EditorialConfig(glossary_pdf_url="https://example.test/Glossario.pdf")
+    config = EditorialConfig(glossary_html_url="https://docs.example.test/Glossario.html")
     entries = [GlossaryEntry("accuratezza", "Accuratezza")]
 
     result = link_file(tex, entries, config)
@@ -103,7 +89,7 @@ Accuratezza
 def test_manual_terms_are_collected_and_require_decision(tmp_path: Path):
     tex = tmp_path / "doc.tex"
     tex.write_text(r"\begin{document}Accuratezza.\end{document}", encoding="utf-8")
-    config = EditorialConfig(glossary_pdf_url="https://example.test/Glossario.pdf")
+    config = EditorialConfig(glossary_html_url="https://docs.example.test/Glossario.html")
     entries = [GlossaryEntry("accuratezza", "Accuratezza", mode="manual")]
 
     occurrences = collect_manual_occurrences([tex], entries, config)
@@ -118,7 +104,7 @@ def test_manual_terms_are_collected_and_require_decision(tmp_path: Path):
 def test_link_file_matches_latex_nonbreaking_spaces(tmp_path: Path):
     tex = tmp_path / "doc.tex"
     tex.write_text(r"\begin{document}Analisi~Statica.\end{document}", encoding="utf-8")
-    config = EditorialConfig(glossary_pdf_url="https://example.test/Glossario.pdf")
+    config = EditorialConfig(glossary_html_url="https://docs.example.test/Glossario.html")
     entries = [GlossaryEntry("analisi-statica", "Analisi Statica")]
 
     result = link_file(tex, entries, config)
@@ -135,7 +121,7 @@ Ai fini del test: AI, "ai", (ai...), [ai].
 \end{document}""",
         encoding="utf-8",
     )
-    config = EditorialConfig(glossary_pdf_url="https://example.test/Glossario.pdf")
+    config = EditorialConfig(glossary_html_url="https://docs.example.test/Glossario.html")
     entries = [GlossaryEntry("ai", "AI")]
 
     result = link_file(tex, entries, config)
@@ -166,7 +152,7 @@ Accuratezza nel corpo.
         encoding="utf-8",
     )
     config = EditorialConfig(
-        glossary_pdf_url="https://example.test/Glossario.pdf",
+        glossary_html_url="https://docs.example.test/Glossario.html",
         ignored_sections=["frontespizio", "indice"],
         ignored_commands=["section"],
     )
@@ -191,7 +177,7 @@ Accuratezza nel corpo.
         encoding="utf-8",
     )
     config = EditorialConfig(
-        glossary_pdf_url="https://example.test/Glossario.pdf",
+        glossary_html_url="https://docs.example.test/Glossario.html",
         ignored_sections=["frontespizio"],
         ignored_commands=["chapter"],
     )

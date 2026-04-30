@@ -4,7 +4,7 @@
   <a href="{{ url_for('operation') }}">Operazione</a>
   <a class="active" href="#format-input">Input</a>
   <a href="#format-detection">Rilevamento</a>
-  {% if formatted_text %}
+  {% if entries %}
     <a href="#format-review">Revisione</a>
     <a href="#format-output">Output</a>
   {% else %}
@@ -18,26 +18,11 @@
   <div class="page-head">
     <div>
       <h1>Formatta Glossario .tex</h1>
-      <p>Prepara un glossario LaTeX con ID stabili e voci confermate. Il file sorgente viene sovrascritto solo se lo scegli nella fase finale.</p>
+      <p>Leggi un glossario LaTeX, conferma le voci e genera l'HTML navigabile usato dai link nei documenti.</p>
     </div>
     <div class="page-actions">
       <a class="button-link" href="{{ url_for('operation') }}">Torna alla home</a>
       <a class="button-link" href="{{ url_for('settings') }}">Impostazioni</a>
-    </div>
-  </div>
-
-  <div class="guidance-strip">
-    <div>
-      <strong>Input</strong>
-      <span>Carica un file oppure incolla il sorgente LaTeX.</span>
-    </div>
-    <div>
-      <strong>Rilevamento</strong>
-      <span>Scegli la struttura usata per riconoscere le voci reali.</span>
-    </div>
-    <div>
-      <strong>Conferma</strong>
-      <span>Escludi falsi positivi, correggi definizioni e salva.</span>
     </div>
   </div>
 
@@ -46,12 +31,18 @@
       <div>
         <p class="section-kicker">Passo 1</p>
         <h2>Input glossario</h2>
-        <p class="muted">Se scegli un file locale, l'app puo anche sovrascriverlo alla conferma. Se incolli il contenuto, salva come nuovo file.</p>
+        <p class="muted">Scegli un file locale oppure incolla direttamente il contenuto LaTeX. Il sorgente non viene modificato.</p>
       </div>
       <label>File glossario .tex
         <span class="field-with-action wide">
           <input id="source_glossary_path" name="source_glossary_path" value="{{ source_path }}" placeholder="/percorso/Glossario.tex">
           <button type="button" data-picker data-kind="file" data-target="#source_glossary_path">Scegli</button>
+        </span>
+      </label>
+      <label>File HTML da generare
+        <span class="field-with-action wide">
+          <input id="html_output_path" name="html_output_path" value="{{ html_output_path }}" placeholder="/percorso/Glossario.html">
+          <button type="button" data-picker data-kind="file" data-target="#html_output_path">Scegli</button>
         </span>
       </label>
       <label>Oppure incolla contenuto LaTeX
@@ -62,22 +53,28 @@
     <section id="format-detection" class="form-section guided-block">
       <div>
         <p class="section-kicker">Passo 2</p>
-        <h2>Metodo di rilevamento</h2>
-        <p class="muted">Indica quale struttura identifica una voce del glossario. Usa il metodo esplicito quando conosci il formato del file: riduce i falsi positivi nei preamboli e nelle macro.</p>
+        <h2>Rilevamento entry</h2>
+        <p class="muted">Scegli come riconoscere le voci del glossario. Il comando personalizzato usa il formato <code>\comando{Termine}</code>.</p>
       </div>
       <fieldset class="segmented-field three-options">
-        <legend>Come leggere le voci</legend>
-        <label><input type="radio" name="glossary_detection" value="auto" {% if config.glossary_detection not in ["structured", "subsection"] %}checked{% endif %}> Automatico</label>
-        <label><input type="radio" name="glossary_detection" value="structured" {% if config.glossary_detection == "structured" %}checked{% endif %}> Macro <code>\glossaryentry{id}{Termine}</code></label>
-        <label><input type="radio" name="glossary_detection" value="subsection" {% if config.glossary_detection == "subsection" %}checked{% endif %}> Sezioni <code>\subsection{Termine}</code></label>
+        <legend>Metodo di rilevamento</legend>
+        <label><input type="radio" name="glossary_detection" value="auto" {% if config.glossary_detection == "auto" %}checked{% endif %}> Auto</label>
+        <label><input type="radio" name="glossary_detection" value="subsection" {% if config.glossary_detection == "subsection" %}checked{% endif %}> <code>\subsection{Termine}</code></label>
+        <label><input type="radio" name="glossary_detection" value="custom" {% if config.glossary_detection == "custom" %}checked{% endif %}> Comando specifico</label>
       </fieldset>
+      <label>Comando specifico
+        <input name="glossary_custom_command" value="{{ config.glossary_custom_command }}" placeholder="glossaryentry">
+      </label>
+      <label>Descrizione struttura LaTeX
+        <textarea class="structure-note" name="glossary_structure_description" rows="3">{{ config.glossary_structure_description }}</textarea>
+      </label>
       <div class="actions">
         <a class="button-link" href="{{ url_for('operation') }}">Indietro</a>
-        <button name="action" value="format" type="submit">Rileva e genera anteprima</button>
+        <button name="action" value="format" type="submit">Rileva voci</button>
       </div>
     </section>
 
-    {% if formatted_text %}
+    {% if entries %}
       <section id="format-review" class="form-section guided-block">
         <div>
           <p class="section-kicker">Passo 3</p>
@@ -146,27 +143,16 @@
       <section id="format-output" class="form-section guided-block">
         <div>
           <p class="section-kicker">Passo 4</p>
-          <h2>Salvataggio e PDF</h2>
-          <p class="muted">Il testo formattato resta modificabile prima del salvataggio. La compilazione usa il tuo ambiente LaTeX locale configurato nelle impostazioni.</p>
+          <h2>Generazione HTML</h2>
+          <p class="muted">Scegli dove salvare il glossario HTML. Lo stesso file sarà servito anche dall'URL locale dell'app.</p>
         </div>
-        <label>Anteprima sorgente formattato
-          <textarea name="formatted_text" rows="12">{{ formatted_text }}</textarea>
-        </label>
-        <fieldset class="segmented-field">
-          <legend>Dove salvare</legend>
-          <label><input type="radio" name="save_mode" value="copy" checked> Nuovo file <code>.tex</code></label>
-          <label><input type="radio" name="save_mode" value="overwrite"> Sovrascrivi file sorgente</label>
-        </fieldset>
-        <label>Path nuovo file
-          <input name="output_path" value="{{ output_path }}" placeholder="/percorso/Glossario.formatted.tex">
-        </label>
-        <label>Nome PDF opzionale
-          <input name="pdf_name" placeholder="Glossario.pdf">
-        </label>
+        <div class="summary-row">
+          <span>File HTML</span>
+          <code>{{ html_output_path }}</code>
+        </div>
         <div class="actions">
-          <button name="action" value="format" type="submit">Aggiorna anteprima</button>
-          <button class="primary" name="action" value="save_formatted" type="submit">Salva glossario</button>
-          <button name="action" value="compile_formatted" type="submit">Salva e compila PDF</button>
+          <button name="action" value="format" type="submit">Aggiorna rilevamento</button>
+          <button class="primary" name="action" value="save_html" type="submit">Genera HTML</button>
         </div>
       </section>
     {% endif %}

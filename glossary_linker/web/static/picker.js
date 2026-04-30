@@ -78,11 +78,12 @@ async function refreshGlossaryEntries({ forced = false } = {}) {
     repo_root: document.querySelector("#repo_root")?.value || "",
     glossary_path: document.querySelector("#glossary_path")?.value || "",
     glossary_html_url: document.querySelector("#glossary_html_url")?.value || "",
-    glossary_link_target: "html",
-    html_anchor_format: document.querySelector("#html_anchor_format")?.value || ""
+    glossary_html_path: document.querySelector("[name='glossary_html_path']")?.value || "",
+    html_anchor_format: document.querySelector("#html_anchor_format")?.value || "",
+    glossary_detection: document.querySelector('input[name="glossary_detection"]:checked')?.value || "auto",
+    glossary_custom_command: document.querySelector("[name='glossary_custom_command']")?.value || "",
+    glossary_structure_description: document.querySelector("[name='glossary_structure_description']")?.value || ""
   };
-  const detection = document.querySelector('input[name="glossary_detection"]:checked');
-  if (detection) payload.glossary_detection = detection.value;
 
   try {
     const response = await fetch("/glossary-preview", {
@@ -92,6 +93,9 @@ async function refreshGlossaryEntries({ forced = false } = {}) {
     });
     const data = await response.json();
     if (!data.ok) throw new Error(data.error || "Impossibile leggere il glossario.");
+    if (Array.isArray(data.entries)) {
+      renderEntries(data.entries, collectEntryState());
+    }
     if (status) {
       const stats = data.stats || {};
       status.textContent = `${stats.total || 0} termini rilevati, ${stats.manual || 0} in revisione manuale, ${stats.new || 0} nuovi termini. Apri il glossario per confermare la lista.`;
@@ -149,14 +153,15 @@ async function saveWizardState() {
     repo_root: document.querySelector("#repo_root")?.value || "",
     glossary_path: document.querySelector("#glossary_path")?.value || "",
     glossary_html_url: document.querySelector("#glossary_html_url")?.value || "",
-    glossary_link_target: "html",
+    glossary_html_path: document.querySelector("[name='glossary_html_path']")?.value || "",
     html_anchor_format: document.querySelector("#html_anchor_format")?.value || "",
+    glossary_detection: document.querySelector('input[name="glossary_detection"]:checked')?.value || "auto",
+    glossary_custom_command: document.querySelector("[name='glossary_custom_command']")?.value || "",
+    glossary_structure_description: document.querySelector("[name='glossary_structure_description']")?.value || "",
     source_dir: document.querySelector("#source_dir")?.value || ".",
     review_order: form.querySelector('input[name="review_order"]:checked')?.value || "by_term",
     new_entry_ids: form.querySelector('input[name="new_entry_ids"]')?.value || ""
   };
-  const detection = document.querySelector('input[name="glossary_detection"]:checked');
-  if (detection) payload.glossary_detection = detection.value;
   if (form.querySelector("[data-rule-editor]")) {
     payload.exclude_file_patterns = document.querySelector("#exclude_file_patterns")?.value || "";
     payload.ignored_environments = document.querySelector("#ignored_environments")?.value || "";
@@ -230,13 +235,15 @@ function renderFileList(target, listSelector) {
 
 function collectEntryState() {
   const state = new Map();
-  document.querySelectorAll("#entries_tbody tr[data-entry]").forEach((row) => {
+  document.querySelectorAll("[data-entry-review-row]").forEach((row) => {
     const id = row.querySelector('input[name="entry_id"]')?.value;
     if (!id) return;
     const aliasInput = [...row.querySelectorAll("input")].find((input) => input.name === `aliases_${id}`);
+    const definitionInput = [...row.querySelectorAll("textarea")].find((input) => input.name === `definition_${id}`);
     const modeInput = [...row.querySelectorAll("input")].find((input) => input.name === `mode_${id}`);
     state.set(id, {
       aliases: aliasInput?.value || "",
+      definition: definitionInput?.value || "",
       manual: Boolean(modeInput?.checked)
     });
   });
@@ -244,42 +251,56 @@ function collectEntryState() {
 }
 
 function renderEntries(entries, previousState = new Map()) {
-  const tbody = document.querySelector("#entries_tbody");
-  if (!tbody) return;
-  tbody.innerHTML = "";
+  const manualBody = document.querySelector('[data-wizard-entry-table="manual"]');
+  const autoBody = document.querySelector('[data-wizard-entry-table="automatic"]');
+  if (!manualBody || !autoBody) return;
+  manualBody.innerHTML = "";
+  autoBody.innerHTML = "";
   if (!entries.length) {
-    const row = document.createElement("tr");
-    const cell = document.createElement("td");
-    cell.colSpan = 5;
-    cell.textContent = "Nessuna voce rilevata. Verifica il path del glossario o usa Aggiorna voci.";
-    row.appendChild(cell);
-    tbody.appendChild(row);
+    appendEmptyReviewRow(autoBody, "Nessuna voce rilevata. Verifica il path del glossario o usa Aggiorna dal .tex.");
+    appendEmptyReviewRow(manualBody, "Nessuna voce rilevata.");
+    updateWizardEntryPagination("automatic");
+    updateWizardEntryPagination("manual");
     return;
   }
   entries.forEach((entry) => {
     const state = previousState.get(entry.id);
     const aliases = state ? state.aliases : (entry.aliases || []).join(", ");
+    const definition = state ? state.definition : entry.definition || "";
     const manual = state ? state.manual : entry.mode === "manual";
+    const tbody = manual ? manualBody : autoBody;
     const row = document.createElement("tr");
     row.dataset.entry = "";
+    row.dataset.entryReviewRow = "";
+    row.dataset.entryId = entry.id;
+    row.dataset.entryTerm = (entry.term || "").toLowerCase();
+    row.dataset.entryMode = manual ? "manual" : "automatic";
 
-    const idCell = document.createElement("td");
+    const termCell = document.createElement("td");
+    const termStrong = document.createElement("strong");
+    termStrong.textContent = entry.term;
     const code = document.createElement("code");
     code.textContent = entry.id;
     const hidden = document.createElement("input");
     hidden.type = "hidden";
     hidden.name = "entry_id";
     hidden.value = entry.id;
+    const termHidden = document.createElement("input");
+    termHidden.type = "hidden";
+    termHidden.name = `term_${entry.id}`;
+    termHidden.value = entry.term;
     const idContent = document.createElement("div");
     idContent.className = "entry-term-cell";
-    idContent.append(code, hidden);
-    idCell.appendChild(idContent);
-
-    const termCell = document.createElement("td");
-    termCell.textContent = entry.term;
+    idContent.append(termStrong, code, hidden, termHidden);
+    termCell.appendChild(idContent);
 
     const definitionCell = document.createElement("td");
-    definitionCell.textContent = entry.definition || "";
+    const definitionInput = document.createElement("textarea");
+    definitionInput.className = "definition-input";
+    definitionInput.name = `definition_${entry.id}`;
+    definitionInput.rows = 2;
+    definitionInput.value = definition;
+    definitionCell.appendChild(definitionInput);
 
     const aliasCell = document.createElement("td");
     const aliasInput = document.createElement("input");
@@ -293,7 +314,7 @@ function renderEntries(entries, previousState = new Map()) {
     const modeCell = document.createElement("td");
     modeCell.className = "mode-cell";
     const label = document.createElement("label");
-    label.className = "switch icon-only";
+    label.className = "switch labeled-switch";
     label.title = `Modalità per ${entry.term}`;
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
@@ -304,15 +325,28 @@ function renderEntries(entries, previousState = new Map()) {
     checkbox.setAttribute("aria-label", `Modalità per ${entry.term}`);
     const visual = document.createElement("span");
     const text = document.createElement("em");
-    text.className = "sr-only";
     text.dataset.modeLabel = "";
     label.append(checkbox, visual, text);
     modeCell.appendChild(label);
 
-    row.append(idCell, termCell, definitionCell, aliasCell, modeCell);
+    row.append(termCell, definitionCell, aliasCell, modeCell);
     tbody.appendChild(row);
     updateModeLabel(checkbox);
   });
+  ensureReviewEmptyRows();
+  sortWizardEntryTables();
+  updateWizardEntryPagination("automatic");
+  updateWizardEntryPagination("manual");
+}
+
+function appendEmptyReviewRow(tbody, message) {
+  const row = document.createElement("tr");
+  row.dataset.emptyRow = "";
+  const cell = document.createElement("td");
+  cell.colSpan = 4;
+  cell.textContent = message;
+  row.appendChild(cell);
+  tbody.appendChild(row);
 }
 
 function updateModeLabel(input) {
@@ -324,6 +358,11 @@ function updateModeLabel(input) {
 }
 
 const entryTables = {
+  manual: { page: 0, query: "" },
+  automatic: { page: 0, query: "" }
+};
+
+const wizardEntryTables = {
   manual: { page: 0, query: "" },
   automatic: { page: 0, query: "" }
 };
@@ -346,6 +385,94 @@ function initFormatEntries() {
   sortFormatEntries();
   updateFormatEntryCounts();
   updateFormatPagination();
+}
+
+function initWizardSteps() {
+  const form = document.querySelector("[data-wizard-steps]");
+  if (!form) return;
+  showWizardPanel("glossary");
+}
+
+function showWizardPanel(name) {
+  document.querySelectorAll("[data-wizard-panel]").forEach((panel) => {
+    panel.hidden = panel.dataset.wizardPanel !== name;
+  });
+  const actions = document.querySelector("[data-wizard-operation-actions]");
+  if (actions) actions.hidden = name !== "operation";
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function initWizardEntryTables() {
+  if (!document.querySelector("[data-wizard-entry-table]")) return;
+  ensureReviewEmptyRows();
+  sortWizardEntryTables();
+  updateWizardEntryPagination("automatic");
+  updateWizardEntryPagination("manual");
+}
+
+function sortWizardEntryTables() {
+  ["manual", "automatic"].forEach((kind) => {
+    const table = document.querySelector(`[data-wizard-entry-table="${kind}"]`);
+    if (!table) return;
+    [...table.querySelectorAll("[data-entry-review-row]")]
+      .sort((a, b) => (a.dataset.entryTerm || "").localeCompare(b.dataset.entryTerm || "", "it"))
+      .forEach((row) => table.appendChild(row));
+  });
+}
+
+function ensureReviewEmptyRows() {
+  ["manual", "automatic"].forEach((kind) => {
+    const table = document.querySelector(`[data-wizard-entry-table="${kind}"]`);
+    if (!table) return;
+    table.querySelectorAll("[data-empty-row]").forEach((row) => row.remove());
+    if (!table.querySelector("[data-entry-review-row]")) {
+      appendEmptyReviewRow(table, "Nessuna voce in questa revisione.");
+    }
+  });
+}
+
+function updateWizardEntryPagination(kind) {
+  const table = document.querySelector(`[data-wizard-entry-table="${kind}"]`);
+  if (!table) return;
+  table.querySelectorAll("[data-empty-row]").forEach((row) => row.hidden = false);
+  const rows = [...table.querySelectorAll("[data-entry-review-row]")];
+  const state = wizardEntryTables[kind];
+  const query = state.query.trim().toLowerCase();
+  const filtered = rows.filter((row) => row.textContent.toLowerCase().includes(query));
+  const pageSize = 10;
+  const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  state.page = Math.min(state.page, pages - 1);
+  const start = state.page * pageSize;
+  const visible = new Set(filtered.slice(start, start + pageSize));
+  rows.forEach((row) => {
+    row.hidden = !visible.has(row);
+  });
+  const empty = table.querySelector("[data-empty-row]");
+  if (empty) empty.hidden = filtered.length !== 0;
+  const label = document.querySelector(`[data-wizard-entry-page-label="${kind}"]`);
+  const prev = document.querySelector(`[data-wizard-entry-prev="${kind}"]`);
+  const next = document.querySelector(`[data-wizard-entry-next="${kind}"]`);
+  if (label) label.textContent = `${state.page + 1} / ${pages} (${filtered.length})`;
+  if (prev) prev.disabled = state.page === 0;
+  if (next) next.disabled = state.page >= pages - 1;
+}
+
+function moveWizardEntryRow(input) {
+  const row = input.closest("[data-entry-review-row]");
+  if (!row) return;
+  const targetKind = input.checked ? "manual" : "automatic";
+  const sourceKind = input.checked ? "automatic" : "manual";
+  const targetTable = document.querySelector(`[data-wizard-entry-table="${targetKind}"]`);
+  if (!targetTable) return;
+  row.dataset.entryMode = targetKind;
+  targetTable.appendChild(row);
+  updateModeLabel(input);
+  ensureReviewEmptyRows();
+  sortWizardEntryTables();
+  wizardEntryTables[sourceKind].page = 0;
+  wizardEntryTables[targetKind].page = 0;
+  updateWizardEntryPagination("manual");
+  updateWizardEntryPagination("automatic");
 }
 
 function sortEntryTables() {
@@ -698,6 +825,12 @@ document.addEventListener("click", (event) => {
     const dialog = document.getElementById(modalButton.dataset.openModal);
     if (dialog && typeof dialog.showModal === "function") dialog.showModal();
   }
+
+  const wizardNext = event.target.closest("[data-wizard-next]");
+  if (wizardNext) showWizardPanel("operation");
+
+  const wizardBack = event.target.closest("[data-wizard-back]");
+  if (wizardBack) showWizardPanel("glossary");
 });
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -709,6 +842,8 @@ document.addEventListener("DOMContentLoaded", () => {
     if (target) renderFileList(target, button.dataset.fileList);
   });
   document.querySelectorAll("[data-mode-switch]").forEach(updateModeLabel);
+  initWizardSteps();
+  initWizardEntryTables();
   initEntryTables();
   initFormatEntries();
   const debouncedRefresh = debounce(() => refreshGlossaryEntries());
@@ -728,6 +863,8 @@ document.addEventListener("change", (event) => {
   if (modeSwitch) {
     if (document.querySelector("[data-entries-form]")) {
       moveEntryRow(modeSwitch);
+    } else if (modeSwitch.closest("[data-entry-review-row]")) {
+      moveWizardEntryRow(modeSwitch);
     } else {
       updateModeLabel(modeSwitch);
     }
@@ -746,6 +883,15 @@ document.addEventListener("input", (event) => {
     formatEntries.query = formatSearch.value || "";
     formatEntries.page = 0;
     updateFormatPagination();
+    return;
+  }
+
+  const wizardSearch = event.target.closest("[data-wizard-entry-search]");
+  if (wizardSearch) {
+    const kind = wizardSearch.dataset.wizardEntrySearch;
+    wizardEntryTables[kind].query = wizardSearch.value || "";
+    wizardEntryTables[kind].page = 0;
+    updateWizardEntryPagination(kind);
     return;
   }
 
@@ -780,5 +926,18 @@ document.addEventListener("click", (event) => {
     const kind = next.dataset.pageNext;
     entryTables[kind].page += 1;
     updateEntryPagination(kind);
+  }
+
+  const wizardPrev = event.target.closest("[data-wizard-entry-prev]");
+  if (wizardPrev) {
+    const kind = wizardPrev.dataset.wizardEntryPrev;
+    wizardEntryTables[kind].page = Math.max(0, wizardEntryTables[kind].page - 1);
+    updateWizardEntryPagination(kind);
+  }
+  const wizardNext = event.target.closest("[data-wizard-entry-next]");
+  if (wizardNext) {
+    const kind = wizardNext.dataset.wizardEntryNext;
+    wizardEntryTables[kind].page += 1;
+    updateWizardEntryPagination(kind);
   }
 });

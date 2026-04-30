@@ -9,13 +9,13 @@ import yaml
 
 @dataclass(slots=True)
 class EditorialConfig:
-    glossary_pdf_url: str = ""
     glossary_html_url: str = ""
-    glossary_link_target: str = "html"
+    glossary_html_path: str = "Glossario.html"
     glossary_path: str = "Glossario.tex"
-    anchor_format: str = "#nameddest=gls:{id}"
     html_anchor_format: str = "#gls-{id}"
     glossary_detection: str = "auto"
+    glossary_custom_command: str = ""
+    glossary_structure_description: str = r"Rileva automaticamente il comando LaTeX piu probabile oppure usa \subsection{Termine}."
     excluded_entry_ids: list[str] = field(default_factory=list)
     exclude_file_patterns: list[str] = field(default_factory=lambda: [
         "*.linked.tex",

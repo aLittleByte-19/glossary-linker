@@ -16,7 +16,7 @@ def test_glossary_rules_requires_current_operation_session():
     assert response.headers["Location"].endswith("/")
 
 
-def test_operation_progress_keeps_rules_disabled_before_choice():
+def test_operation_progress_keeps_glossary_disabled_before_choice():
     app = create_app()
     client = app.test_client()
 
@@ -24,7 +24,7 @@ def test_operation_progress_keeps_rules_disabled_before_choice():
     html = response.get_data(as_text=True)
 
     assert response.status_code == 200
-    assert '<span class="disabled">Regole</span>' in html
+    assert '<span class="disabled">Glossario</span>' in html
 
 
 def test_save_output_generates_report_only_when_requested(monkeypatch, tmp_path):
@@ -117,7 +117,31 @@ Definizione.
 
     assert response.status_code == 200
     assert 'id="gls-accuratezza"' in html
+    assert 'id="glossary-search"' in html
     assert "Accuratezza" in html
+
+
+def test_glossary_html_route_serves_configured_generated_file(monkeypatch, tmp_path):
+    import glossary_linker.web.app as webapp
+
+    html_path = tmp_path / "public" / "Glossario.html"
+    html_path.parent.mkdir()
+    html_path.write_text("<!doctype html><title>Generato</title><p>file corretto</p>", encoding="utf-8")
+    editorial_path = tmp_path / "glossary-linker.yml"
+    local_path = tmp_path / "glossary-linker.local.yml"
+    save_editorial_config(EditorialConfig(glossary_html_path=str(html_path)), editorial_path)
+    save_local_config(LocalConfig(default_repo_root=str(tmp_path)), local_path)
+    monkeypatch.setattr(webapp, "EDITORIAL_PATH", editorial_path)
+    monkeypatch.setattr(webapp, "LOCAL_PATH", local_path)
+    app = create_app()
+    client = app.test_client()
+
+    response = client.get("/glossary-html")
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "file corretto" in html
+    assert "Glossario</title>" not in html
 
 
 def test_entries_page_is_only_for_modes_and_aliases(monkeypatch, tmp_path):
@@ -159,6 +183,44 @@ def test_format_glossary_flow_uses_glossary_input_without_project_root():
     assert "File glossario .tex" in html
 
 
+def test_settings_persist_glossary_paths(monkeypatch, tmp_path):
+    import glossary_linker.web.app as webapp
+
+    editorial_path = tmp_path / "glossary-linker.yml"
+    local_path = tmp_path / "glossary-linker.local.yml"
+    save_editorial_config(EditorialConfig(), editorial_path)
+    save_local_config(LocalConfig(), local_path)
+    monkeypatch.setattr(webapp, "EDITORIAL_PATH", editorial_path)
+    monkeypatch.setattr(webapp, "LOCAL_PATH", local_path)
+    app = create_app()
+    client = app.test_client()
+
+    response = client.post("/settings", data={
+        "settings_scope": "environment",
+        "default_repo_root": str(tmp_path),
+        "temporary_directory": "",
+        "latexmk_path": "latexmk",
+        "pdflatex_path": "pdflatex",
+        "xelatex_path": "xelatex",
+        "lualatex_path": "lualatex",
+        "preferred_compiler": "latexmk",
+        "compile_timeout_seconds": "120",
+        "max_compile_passes": "2",
+        "local_server_port": "8765",
+        "log_level": "INFO",
+        "preferred_browser": "",
+        "glossary_path": "docs/Glossario.tex",
+        "glossary_html_path": "public/Glossario.html",
+        "glossary_html_url": "http://127.0.0.1:8765/glossary-html",
+    })
+
+    saved = webapp.load_editorial_config(editorial_path)
+
+    assert response.status_code == 302
+    assert saved.glossary_path == "docs/Glossario.tex"
+    assert saved.glossary_html_path == "public/Glossario.html"
+
+
 def test_format_glossary_preview_confirms_detected_entries(monkeypatch, tmp_path):
     import glossary_linker.web.app as webapp
 
@@ -186,7 +248,7 @@ def test_format_glossary_save_excludes_unchecked_entries(monkeypatch, tmp_path):
 
     entries_path = tmp_path / "entries.yml"
     editorial_path = tmp_path / "glossary-linker.yml"
-    output_path = tmp_path / "Glossario.formatted.tex"
+    output_path = tmp_path / "Glossario.html"
     save_editorial_config(EditorialConfig(), editorial_path)
     monkeypatch.setattr(webapp, "ENTRIES_PATH", entries_path)
     monkeypatch.setattr(webapp, "EDITORIAL_PATH", editorial_path)
@@ -195,7 +257,7 @@ def test_format_glossary_save_excludes_unchecked_entries(monkeypatch, tmp_path):
 
     response = client.post("/format-glossary", data={
         "glossary_detection": "subsection",
-        "formatted_text": r"\begin{document}\subsection{Voce Buona}Ok.\subsection{Voce Errata}No.\end{document}",
+        "glossary_text": r"\begin{document}\subsection{Voce Buona}Ok.\subsection{Voce Errata}No.\end{document}",
         "entry_id": ["voce-buona", "voce-errata"],
         "include_entry_id": ["voce-buona"],
         "term_voce-buona": "Voce Buona",
@@ -204,11 +266,11 @@ def test_format_glossary_save_excludes_unchecked_entries(monkeypatch, tmp_path):
         "definition_voce-errata": "No.",
         "aliases_voce-buona": "",
         "aliases_voce-errata": "",
-        "save_mode": "copy",
-        "output_path": str(output_path),
-        "action": "save_formatted",
+        "html_output_path": str(output_path),
+        "action": "save_html",
     })
 
     assert response.status_code == 200
     assert output_path.exists()
+    assert 'id="gls-voce-buona"' in output_path.read_text(encoding="utf-8")
     assert [entry.id for entry in load_entries_store(entries_path)] == ["voce-buona"]

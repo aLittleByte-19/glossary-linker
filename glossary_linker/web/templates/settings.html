@@ -39,6 +39,7 @@
           {% if tab == "environment" %}
             <div class="settings-subnav">
               <a href="#paths" data-scroll-link>Percorsi</a>
+              <a href="#glossary-paths" data-scroll-link>Glossario</a>
               <a href="#latex-tools" data-scroll-link>Strumenti LaTeX</a>
               <a href="#compile-settings" data-scroll-link>Compilazione</a>
               <a href="#local-behavior" data-scroll-link>Comportamento</a>
@@ -159,6 +160,28 @@
                 <input id="temporary_directory" name="temporary_directory" value="{{ local.temporary_directory }}">
                 <button type="button" data-picker data-kind="directory" data-target="#temporary_directory">Scegli</button>
               </span>
+            </label>
+          </section>
+
+          <section id="glossary-paths" class="form-section">
+            <div>
+              <h2>Glossario</h2>
+              <p class="muted">Il sorgente LaTeX viene letto dal parser; il file HTML e l'output navigabile servito dall'app e usato dai link.</p>
+            </div>
+            <label>Glossario sorgente .tex
+              <span class="field-with-action wide">
+                <input id="settings_glossary_path" name="glossary_path" value="{{ config.glossary_path }}" placeholder="/percorso/Glossario.tex">
+                <button type="button" data-picker data-kind="file" data-target="#settings_glossary_path">Scegli</button>
+              </span>
+            </label>
+            <label>Glossario HTML generato
+              <span class="field-with-action wide">
+                <input id="settings_glossary_html_path" name="glossary_html_path" value="{{ config.glossary_html_path }}" placeholder="/percorso/Glossario.html">
+                <button type="button" data-picker data-kind="file" data-target="#settings_glossary_html_path">Scegli</button>
+              </span>
+            </label>
+            <label>URL glossario HTML
+              <input name="glossary_html_url" value="{{ config.glossary_html_url }}" placeholder="http://127.0.0.1:8765/glossary-html">
             </label>
           </section>
 
