@@ -194,8 +194,15 @@ def _parse_command_entries(text: str, command: str) -> list[GlossaryEntry]:
 
 def _definition_after(block: str) -> str:
     lines = []
+    # Interrompiamo se troviamo comandi di sezionamento che indicano una nuova parte del documento
+    stop_commands = r"\\(?:part|chapter|section|subsection|subsubsection|paragraph|subparagraph|newpage|clearpage)\b"
+    
     for line in block.splitlines():
-        stripped = _clean_definition_line(line.strip())
+        trimmed = line.strip()
+        if re.search(stop_commands, trimmed):
+            break
+            
+        stripped = _clean_definition_line(trimmed)
         if not stripped or stripped.startswith("%"):
             continue
         lines.append(strip_latex(stripped))

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block progress %}
 <nav class="workflow-progress" aria-label="Avanzamento formattazione glossario">
-  <a href="{{ url_for('operation') }}">Operazione</a>
+  <a href="{{ url_for('project_step') }}">Operazione</a>
   <a class="active" href="#format-input">Input</a>
   <a href="#format-detection">Rilevamento</a>
   {% if entries %}
@@ -21,7 +21,7 @@
       <p>Leggi un glossario LaTeX, conferma le voci e genera l'HTML navigabile usato dai link nei documenti.</p>
     </div>
     <div class="page-actions">
-      <a class="button-link" href="{{ url_for('operation') }}">Torna alla home</a>
+      <a class="button-link" href="{{ url_for('project_step') }}">Torna alla home</a>
       <a class="button-link" href="{{ url_for('settings') }}">Impostazioni</a>
     </div>
   </div>
@@ -69,7 +69,7 @@
         <textarea class="structure-note" name="glossary_structure_description" rows="3">{{ config.glossary_structure_description }}</textarea>
       </label>
       <div class="actions">
-        <a class="button-link" href="{{ url_for('operation') }}">Indietro</a>
+        <a class="button-link" href="{{ url_for('project_step') }}">Indietro</a>
         <button name="action" value="format" type="submit">Rileva voci</button>
       </div>
     </section>

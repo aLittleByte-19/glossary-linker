@@ -95,8 +95,10 @@ def compile_tex(tex_path: Path, config: LocalConfig, pdf_name: str | None = None
                 output_parts.append(completed.stdout)
             if completed.returncode != 0:
                 break
-    except Exception as exc:
-        return CompileResult(False, command, str(exc))
+    except subprocess.TimeoutExpired as exc:
+        return CompileResult(False, command, f"Compilazione interrotta per timeout dopo {exc.timeout} secondi.")
+    except OSError as exc:
+        return CompileResult(False, command, f"Impossibile avviare il compilatore LaTeX: {exc}")
 
     if completed is None:
         return CompileResult(False, command, "Compilazione non avviata.")
@@ -109,7 +111,10 @@ def compile_tex(tex_path: Path, config: LocalConfig, pdf_name: str | None = None
             pdf_path = target
     ok = completed.returncode == 0
     if config.clean_compile_artifacts:
-        clean_latex_artifacts(tex_path.parent, stem=tex_path.stem, remove_pdf=not ok)
+        try:
+            clean_latex_artifacts(tex_path.parent, stem=tex_path.stem, remove_pdf=not ok)
+        except OSError as exc:
+            output_parts.append(f"\nPulizia degli artefatti non completata: {exc}")
     return CompileResult(ok, command, "".join(output_parts), pdf_path if ok and pdf_path.exists() else None)
 
 

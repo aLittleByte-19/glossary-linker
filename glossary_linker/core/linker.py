@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import fnmatch
+import hashlib
 import json
 import re
 from dataclasses import asdict
@@ -8,6 +9,30 @@ from pathlib import Path
 
 from .config import EditorialConfig
 from .models import FileLinkResult, GlossaryEntry, Occurrence, ProcessingReport
+
+
+def read_text_safe(path: Path) -> str:
+    for encoding in ["utf-8", "latin-1", "cp1252"]:
+        try:
+            return path.read_text(encoding=encoding)
+        except UnicodeDecodeError:
+            continue
+    return path.read_text(encoding="utf-8", errors="replace")
+
+
+def generate_occurrence_id(file_path: Path, root: Path, entry_id: str, context: str) -> str:
+    file_path = file_path.expanduser().resolve()
+    root = root.expanduser().resolve()
+    try:
+        rel_path = file_path.relative_to(root).as_posix()
+    except ValueError:
+        rel_path = file_path.as_posix()
+    
+    # Normalize line endings for robustness
+    normalized_context = context.replace("\r\n", "\n")
+    
+    content = f"{rel_path}|{entry_id}|{normalized_context}"
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
 
 def discover_tex_files(root: Path, config: EditorialConfig) -> tuple[list[Path], list[Path]]:
@@ -29,15 +54,16 @@ def discover_tex_files(root: Path, config: EditorialConfig) -> tuple[list[Path],
     return included, excluded
 
 
-def collect_manual_occurrences(paths: list[Path], entries: list[GlossaryEntry], config: EditorialConfig) -> list[Occurrence]:
+def collect_manual_occurrences(paths: list[Path], entries: list[GlossaryEntry], config: EditorialConfig, root: Path | None = None) -> list[Occurrence]:
+    root = root or Path.cwd()
     manual_entries = [entry for entry in entries if entry.mode == "manual"]
     occurrences: list[Occurrence] = []
     for path in paths:
         if not path.exists():
             continue
-        text = path.read_text(encoding="utf-8")
+        text = read_text_safe(path)
         for match in _find_matches(text, manual_entries, config):
-            occurrences.append(_to_occurrence(text, path, match))
+            occurrences.append(_to_occurrence(text, path, match, root))
     return occurrences
 
 
@@ -47,9 +73,12 @@ def link_file(
     config: EditorialConfig,
     manual_decisions: dict[str, bool] | None = None,
     only_entry_ids: set[str] | None = None,
+    root: Path | None = None,
 ) -> FileLinkResult:
+    root = root or Path.cwd()
     manual_decisions = manual_decisions or {}
-    original = path.read_text(encoding="utf-8")
+    path = path.resolve()
+    original = read_text_safe(path)
     selected_entries = [entry for entry in entries if only_entry_ids is None or entry.id in only_entry_ids]
     matches = _find_matches(original, selected_entries, config)
     replacements: list[tuple[int, int, str, str]] = []
@@ -57,19 +86,30 @@ def link_file(
     manual = 0
     skipped = 0
 
+    def match_priority(m):
+        occ_id = _generate_match_id(original, path, m, root)
+        is_manual_approved = m["entry"].mode == "manual" and manual_decisions.get(occ_id, False)
+        return (0 if is_manual_approved else 1, m["start"], -(m["end"] - m["start"]))
+
     occupied: list[tuple[int, int]] = []
-    for match in matches:
+    for match in sorted(matches, key=match_priority):
         entry = match["entry"]
-        occurrence = _to_occurrence(original, path, match)
-        should_link = entry.mode == "automatic" or manual_decisions.get(occurrence.id, False)
-        if entry.mode == "manual" and occurrence.id not in manual_decisions:
+        occurrence_id = _generate_match_id(original, path, match, root)
+        should_link = entry.mode == "automatic" or manual_decisions.get(occurrence_id, False)
+        
+        if entry.mode == "manual" and occurrence_id not in manual_decisions:
             skipped += 1
             continue
         if not should_link:
-            skipped += 1
+            if entry.mode == "manual":
+                skipped += 1
             continue
+            
         if any(not (match["end"] <= start or match["start"] >= end) for start, end in occupied):
+            if entry.mode == "manual":
+                skipped += 1
             continue
+            
         visible = original[match["start"]:match["end"]]
         replacements.append((match["start"], match["end"], rf"\glslink{{{entry.id}}}{{{visible}}}", entry.mode))
         occupied.append((match["start"], match["end"]))
@@ -96,13 +136,14 @@ def process_files(
     config: EditorialConfig,
     manual_decisions: dict[str, bool] | None = None,
     only_entry_ids: set[str] | None = None,
+    root: Path | None = None,
 ) -> tuple[list[FileLinkResult], ProcessingReport]:
     results: list[FileLinkResult] = []
     report = ProcessingReport()
     found_terms: set[str] = set()
     for path in paths:
         try:
-            result = link_file(path, entries, config, manual_decisions, only_entry_ids)
+            result = link_file(path, entries, config, manual_decisions, only_entry_ids, root)
             results.append(result)
             report.processed_files.append(path)
             report.automatic_links += result.automatic_links
@@ -112,7 +153,7 @@ def process_files(
                 if rf"\glslink{{{entry.id}}}" in result.linked_text:
                     found_terms.add(entry.id)
         except Exception as exc:  # pragma: no cover - reported to UI
-            report.errors.append(f"{path}: {exc}")
+            report.errors.append(f"Impossibile elaborare {path}: {exc}")
     report.missing_terms = [entry.term for entry in entries if entry.id not in found_terms]
     return results, report
 
@@ -316,7 +357,17 @@ def _is_masked(start: int, end: int, ranges: list[tuple[int, int]]) -> bool:
     return any(not (end <= range_start or start >= range_end) for range_start, range_end in ranges)
 
 
-def _to_occurrence(text: str, path: Path, match: dict) -> Occurrence:
+def _generate_match_id(text: str, path: Path, match: dict, root: Path) -> str:
+    start = match["start"]
+    line_number = text.count("\n", 0, start) + 1
+    lines = text.splitlines()
+    context_start = max(0, line_number - 4)
+    context_end = min(len(lines), line_number + 3)
+    context = "\n".join(lines[context_start:context_end])
+    return generate_occurrence_id(path, root, match["entry"].id, context)
+
+
+def _to_occurrence(text: str, path: Path, match: dict, root: Path) -> Occurrence:
     start = match["start"]
     end = match["end"]
     line_number = text.count("\n", 0, start) + 1
@@ -326,7 +377,8 @@ def _to_occurrence(text: str, path: Path, match: dict) -> Occurrence:
     section = _current_section(text[:start])
     visible = text[start:end]
     entry = match["entry"]
-    occurrence_id = f"{path.resolve()}::{entry.id}::{start}:{end}"
+    context = "\n".join(lines[context_start:context_end])
+    occurrence_id = generate_occurrence_id(path, root, entry.id, context)
     return Occurrence(
         id=occurrence_id,
         entry_id=entry.id,
@@ -335,7 +387,7 @@ def _to_occurrence(text: str, path: Path, match: dict) -> Occurrence:
         file_path=path,
         line_number=line_number,
         section=section,
-        context="\n".join(lines[context_start:context_end]),
+        context=context,
         start=start,
         end=end,
     )

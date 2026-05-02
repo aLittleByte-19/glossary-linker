@@ -74,16 +74,17 @@ async function refreshGlossaryEntries({ forced = false } = {}) {
   const status = document.querySelector("#glossary_preview_status");
   if (status) status.textContent = forced ? "Aggiornamento voci in corso..." : "Rilettura glossario...";
 
-  const payload = {
-    repo_root: document.querySelector("#repo_root")?.value || "",
-    glossary_path: document.querySelector("#glossary_path")?.value || "",
-    glossary_html_url: document.querySelector("#glossary_html_url")?.value || "",
-    glossary_html_path: document.querySelector("[name='glossary_html_path']")?.value || "",
-    html_anchor_format: document.querySelector("#html_anchor_format")?.value || "",
-    glossary_detection: document.querySelector('input[name="glossary_detection"]:checked')?.value || "auto",
-    glossary_custom_command: document.querySelector("[name='glossary_custom_command']")?.value || "",
-    glossary_structure_description: document.querySelector("[name='glossary_structure_description']")?.value || ""
-  };
+  const payload = collectOptionalPayload([
+    ["repo_root", "#repo_root"],
+    ["glossary_path", "#glossary_path"],
+    ["glossary_html_url", "#glossary_html_url"],
+    ["glossary_html_path", "[name='glossary_html_path']"],
+    ["html_anchor_format", "#html_anchor_format"],
+    ["glossary_custom_command", "[name='glossary_custom_command']"],
+    ["glossary_structure_description", "[name='glossary_structure_description']"]
+  ]);
+  const detection = document.querySelector('input[name="glossary_detection"]:checked');
+  if (detection) payload.glossary_detection = detection.value;
 
   try {
     const response = await fetch("/glossary-preview", {
@@ -148,20 +149,23 @@ async function discoverTexFiles(button) {
 async function saveWizardState() {
   const form = document.querySelector("[data-wizard-form]");
   if (!form) return;
-  const payload = {
-    operation: document.querySelector('input[name="operation"]:checked')?.value || "",
-    repo_root: document.querySelector("#repo_root")?.value || "",
-    glossary_path: document.querySelector("#glossary_path")?.value || "",
-    glossary_html_url: document.querySelector("#glossary_html_url")?.value || "",
-    glossary_html_path: document.querySelector("[name='glossary_html_path']")?.value || "",
-    html_anchor_format: document.querySelector("#html_anchor_format")?.value || "",
-    glossary_detection: document.querySelector('input[name="glossary_detection"]:checked')?.value || "auto",
-    glossary_custom_command: document.querySelector("[name='glossary_custom_command']")?.value || "",
-    glossary_structure_description: document.querySelector("[name='glossary_structure_description']")?.value || "",
-    source_dir: document.querySelector("#source_dir")?.value || ".",
-    review_order: form.querySelector('input[name="review_order"]:checked')?.value || "by_term",
-    new_entry_ids: form.querySelector('input[name="new_entry_ids"]')?.value || ""
-  };
+  const payload = collectOptionalPayload([
+    ["repo_root", "#repo_root"],
+    ["glossary_path", "#glossary_path"],
+    ["glossary_html_url", "#glossary_html_url"],
+    ["glossary_html_path", "[name='glossary_html_path']"],
+    ["html_anchor_format", "#html_anchor_format"],
+    ["glossary_custom_command", "[name='glossary_custom_command']"],
+    ["glossary_structure_description", "[name='glossary_structure_description']"],
+    ["source_dir", "#source_dir"],
+    ["new_entry_ids", "input[name='new_entry_ids']"]
+  ]);
+  const operation = document.querySelector('input[name="operation"]:checked');
+  if (operation) payload.operation = operation.value;
+  const detection = document.querySelector('input[name="glossary_detection"]:checked');
+  if (detection) payload.glossary_detection = detection.value;
+  const reviewOrder = form.querySelector('input[name="review_order"]:checked');
+  if (reviewOrder) payload.review_order = reviewOrder.value;
   if (form.querySelector("[data-rule-editor]")) {
     payload.exclude_file_patterns = document.querySelector("#exclude_file_patterns")?.value || "";
     payload.ignored_environments = document.querySelector("#ignored_environments")?.value || "";
@@ -169,6 +173,8 @@ async function saveWizardState() {
     payload.ignored_sections = [...form.querySelectorAll('input[name="ignored_sections"]:checked')].map((item) => item.value);
     payload.skip_titles = Boolean(form.querySelector('input[name="skip_titles"]')?.checked);
   }
+  const texPaths = document.querySelector("#tex_paths");
+  if (texPaths) payload.tex_paths = texPaths.value || "";
   try {
     await fetch("/wizard-state", {
       method: "POST",
@@ -178,6 +184,16 @@ async function saveWizardState() {
   } catch {
     // Autosave is opportunistic; explicit submit still saves the same fields.
   }
+}
+
+function collectOptionalPayload(pairs) {
+  const payload = {};
+  pairs.forEach(([name, selector]) => {
+    const input = document.querySelector(selector);
+    if (!input) return;
+    payload[name] = input.value || "";
+  });
+  return payload;
 }
 
 function toRelativePath(path, root) {
@@ -780,6 +796,50 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;");
 }
 
+function initReviewDecisionAjax() {
+  const form = document.querySelector("[data-review-form]");
+  const grid = form?.querySelector(".primary-decisions");
+  const status = form?.querySelector("[data-review-status]");
+  const occurrenceId = grid?.dataset.occurrenceId;
+  const apiUrl = form?.dataset.reviewApi;
+  if (!form || !grid || !occurrenceId || !apiUrl) return;
+
+  const buttons = [...form.querySelectorAll("[data-ajax-decision]")];
+  buttons.forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.preventDefault();
+      const value = button.value;
+      buttons.forEach((item) => item.disabled = true);
+      button.classList.add("loading");
+      if (status) status.textContent = "Salvataggio...";
+
+      try {
+        const response = await fetch(apiUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ occurrence_id: occurrenceId, value })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.ok) {
+          throw new Error(data.error || "Errore durante il salvataggio.");
+        }
+        button.classList.remove("loading");
+        button.classList.add("saved");
+        button.textContent = "Salvato!";
+        if (status) status.textContent = "Salvato!";
+        window.setTimeout(() => {
+          window.location.assign(data.redirect_url || form.action);
+        }, 260);
+      } catch (error) {
+        button.classList.remove("loading");
+        buttons.forEach((item) => item.disabled = false);
+        if (status) status.textContent = "Salvataggio non riuscito.";
+        showAppAlert(error.message, "error");
+      }
+    });
+  });
+}
+
 document.addEventListener("click", (event) => {
   const button = event.target.closest("[data-picker]");
   if (button) {
@@ -837,6 +897,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initRuleEditors();
   initSettingsSearch();
   initScrollSpy();
+  initReviewDecisionAjax();
   document.querySelectorAll("[data-file-list]").forEach((button) => {
     const target = document.querySelector(button.dataset.target);
     if (target) renderFileList(target, button.dataset.fileList);

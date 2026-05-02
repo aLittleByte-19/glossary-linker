@@ -1,16 +1,22 @@
 {% extends "base.html" %}
+
 {% block progress %}
 <nav class="workflow-progress" aria-label="Avanzamento">
-  <a class="active" href="{{ url_for('operation') }}">Operazione</a>
+  <a class="active" aria-current="step" href="{{ url_for('project_step', job_id=job_id) }}">Operazione</a>
   {% if has_operation %}
-    <a href="{{ url_for('glossary_rules') }}">Glossario</a>
+    <a href="{{ url_for('files_step', job_id=job_id) }}">Documenti</a>
+    <a href="{{ url_for('rules_step', job_id=job_id) }}">Regole</a>
+    <a href="{{ url_for('glossary_step', job_id=job_id) }}">Glossario</a>
   {% else %}
+    <span class="disabled">Documenti</span>
+    <span class="disabled">Regole</span>
     <span class="disabled">Glossario</span>
   {% endif %}
   <span class="disabled">Revisione</span>
   <span class="disabled">Output</span>
 </nav>
 {% endblock %}
+
 {% block content %}
 <section class="home-layout app-home">
   <section class="panel home-card" aria-labelledby="operation-title">
@@ -21,7 +27,7 @@
         <p class="muted">Le operazioni sono indipendenti e arrivano a un punto di conferma. I sorgenti vengono sovrascritti solo se lo scegli esplicitamente alla fine.</p>
       </div>
     </div>
-    <form method="post" action="{{ url_for('set_operation') }}" class="operation-grid">
+    <form method="post" class="operation-grid">
       <label class="operation-card">
         <input type="radio" name="operation" value="link-documents" {% if selected_operation == "link-documents" %}checked{% endif %}>
         <span>
@@ -33,7 +39,7 @@
         <input type="radio" name="operation" value="update-glossary" {% if selected_operation == "update-glossary" %}checked{% endif %}>
         <span>
           <strong>Aggiorna per nuove voci</strong>
-          <small>Per rileggere il glossario, scegliere gli ID nuovi o indicati e applicarli ai documenti gia linkati.</small>
+          <small>Per rileggere il glossario, scegliere gli ID nuovi o indicati e applicarli ai documenti già linkati.</small>
         </span>
       </label>
       <label class="operation-card">
@@ -90,20 +96,5 @@
       </div>
     </aside>
   </div>
-
-  <section class="home-support-grid" aria-label="Indicazioni rapide">
-    <article class="support-card">
-      <h2>Prima di linkare</h2>
-      <p>Controlla che il glossario rilevato contenga solo voci reali e che i termini ambigui siano in modalità Manuale.</p>
-    </article>
-    <article class="support-card">
-      <h2>Durante la revisione</h2>
-      <p>Le azioni estese applicano la scelta al file o al termine. Puoi ancora tornare indietro prima del report finale.</p>
-    </article>
-    <article class="support-card">
-      <h2>Alla fine</h2>
-      <p>Salva copie <code>.linked.tex</code> per una verifica non distruttiva, oppure sovrascrivi solo quando il risultato è approvato.</p>
-    </article>
-  </section>
 </section>
 {% endblock %}

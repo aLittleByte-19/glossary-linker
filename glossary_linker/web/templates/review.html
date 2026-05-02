@@ -1,17 +1,19 @@
 {% extends "base.html" %}
 {% block progress %}
 <nav class="workflow-progress" aria-label="Avanzamento">
-  <a href="{{ url_for('operation') }}">Operazione</a>
-  <a href="{{ url_for('glossary_rules') }}">Regole</a>
-  <a class="active" href="{{ url_for('review', job_id=job_id, index=index) }}">Revisione</a>
+  <a href="{{ url_for('project_step', job_id=job_id) }}">Operazione</a>
+  <a href="{{ url_for('files_step', job_id=job_id) }}">Documenti</a>
+  <a href="{{ url_for('rules_step', job_id=job_id) }}">Regole</a>
+  <a href="{{ url_for('glossary_step', job_id=job_id) }}">Glossario</a>
+  <a class="active" aria-current="step" href="{{ url_for('review', job_id=job_id, index=0) }}">Revisione</a>
   <a href="{{ url_for('output', job_id=job_id) }}">Output</a>
 </nav>
 {% endblock %}
 {% block content %}
 <section class="panel review-panel">
-  <form method="post" class="review-layout">
+  <form method="post" class="review-layout" data-review-form data-review-api="{{ url_for('api_decision', job_id=job_id) }}">
     <header class="review-header">
-      <button name="action" value="prev" type="submit" class="nav-button" {% if index == 0 %}disabled{% endif %}>Indietro</button>
+      <a class="button-link nav-button" href="{{ previous_step_url }}">Indietro</a>
       <div>
         <p class="eyebrow">Revisione manuale</p>
         <h1>Occorrenza {{ index + 1 }} di {{ total }}</h1>
@@ -90,10 +92,11 @@
         <div>
           <h2>Decisione su questa occorrenza</h2>
           <p class="muted">Questa scelta vale solo per la parola evidenziata nel contesto.</p>
+          <p class="review-save-status" data-review-status aria-live="polite"></p>
         </div>
-        <div class="decision-grid primary-decisions">
-          <button class="danger-primary" name="action" value="skip" type="submit">Salta</button>
-          <button class="success-primary" name="action" value="link" type="submit">Collega</button>
+        <div class="decision-grid primary-decisions" data-occurrence-id="{{ occurrence.id }}">
+          <button class="danger-primary" name="action" value="skip" type="submit" data-ajax-decision>Salta</button>
+          <button class="success-primary" name="action" value="link" type="submit" data-ajax-decision>Collega</button>
         </div>
       </div>
     </section>
