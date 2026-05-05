@@ -5,7 +5,7 @@
   <a href="{{ url_for('files_step', job_id=job_id) }}">Documenti</a>
   <a href="{{ url_for('rules_step', job_id=job_id) }}">Regole</a>
   <a href="{{ url_for('glossary_step', job_id=job_id) }}">Glossario</a>
-  <a class="active" aria-current="step" href="{{ url_for('review', job_id=job_id, index=0) }}">Revisione</a>
+  <a class="active" aria-current="step" href="{{ url_for('review', job_id=job_id, index=index) }}">Revisione</a>
   <a href="{{ url_for('output', job_id=job_id) }}">Output</a>
 </nav>
 {% endblock %}

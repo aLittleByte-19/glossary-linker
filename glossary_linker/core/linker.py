@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import bisect
 import fnmatch
 import hashlib
 import json
@@ -62,7 +63,9 @@ def collect_manual_occurrences(paths: list[Path], entries: list[GlossaryEntry], 
         if not path.exists():
             continue
         text = read_text_safe(path)
-        for match in _find_matches(text, manual_entries, config):
+        matches = _find_matches(text, manual_entries, config)
+        _enrich_matches(text, path, matches, root)
+        for match in matches:
             occurrences.append(_to_occurrence(text, path, match, root))
     return occurrences
 
@@ -81,6 +84,7 @@ def link_file(
     original = read_text_safe(path)
     selected_entries = [entry for entry in entries if only_entry_ids is None or entry.id in only_entry_ids]
     matches = _find_matches(original, selected_entries, config)
+    _enrich_matches(original, path, matches, root)
     replacements: list[tuple[int, int, str, str]] = []
     automatic = 0
     manual = 0
@@ -211,7 +215,25 @@ def _latex_href_target(config: EditorialConfig) -> str:
     anchor = _effective_anchor_format(config, target_url)
     if "{id}" not in anchor:
         anchor = anchor.rstrip("#") + "{id}"
-    return (target_url + anchor).replace("#", r"\#").replace("{id}", "#1")
+    
+    # Combined target before escaping
+    full_target = target_url + anchor
+    
+    # Escape LaTeX special characters that might appear in URLs
+    # and break hyperref when inside a macro.
+    # Common LaTeX special characters: # $ % & ~ _ ^ \ { }
+    chars_to_escape = [
+        ("%", r"\%"),
+        ("&", r"\&"),
+        ("$", r"\$"),
+        ("_", r"\_"),
+        ("#", r"\#"),
+    ]
+    
+    for char, replacement in chars_to_escape:
+        full_target = full_target.replace(char, replacement)
+        
+    return full_target.replace("{id}", "#1")
 
 
 def _target_url(config: EditorialConfig) -> str:
@@ -357,28 +379,58 @@ def _is_masked(start: int, end: int, ranges: list[tuple[int, int]]) -> bool:
     return any(not (end <= range_start or start >= range_end) for range_start, range_end in ranges)
 
 
+def _enrich_matches(text: str, path: Path, matches: list[dict], root: Path) -> None:
+    if not matches:
+        return
+    lines = text.splitlines()
+    line_starts = [0]
+    for m in re.finditer("\n", text):
+        line_starts.append(m.end())
+        
+    for m in matches:
+        start = m["start"]
+        line_number = bisect.bisect_right(line_starts, start)
+        m["line_number"] = line_number
+        context_start = max(0, line_number - 4)
+        context_end = min(len(lines), line_number + 3)
+        context = "\n".join(lines[context_start:context_end])
+        m["id"] = generate_occurrence_id(path, root, m["entry"].id, context)
+        m["context"] = context
+
+
 def _generate_match_id(text: str, path: Path, match: dict, root: Path) -> str:
+    if "id" in match:
+        return match["id"]
     start = match["start"]
     line_number = text.count("\n", 0, start) + 1
     lines = text.splitlines()
     context_start = max(0, line_number - 4)
     context_end = min(len(lines), line_number + 3)
     context = "\n".join(lines[context_start:context_end])
-    return generate_occurrence_id(path, root, match["entry"].id, context)
+    match["id"] = generate_occurrence_id(path, root, match["entry"].id, context)
+    return match["id"]
 
 
 def _to_occurrence(text: str, path: Path, match: dict, root: Path) -> Occurrence:
     start = match["start"]
     end = match["end"]
-    line_number = text.count("\n", 0, start) + 1
-    lines = text.splitlines()
-    context_start = max(0, line_number - 4)
-    context_end = min(len(lines), line_number + 3)
+    entry = match["entry"]
+    
+    if "id" in match and "line_number" in match and "context" in match:
+        occurrence_id = match["id"]
+        line_number = match["line_number"]
+        context = match["context"]
+    else:
+        line_number = text.count("\n", 0, start) + 1
+        lines = text.splitlines()
+        context_start = max(0, line_number - 4)
+        context_end = min(len(lines), line_number + 3)
+        context = "\n".join(lines[context_start:context_end])
+        occurrence_id = generate_occurrence_id(path, root, entry.id, context)
+        
     section = _current_section(text[:start])
     visible = text[start:end]
-    entry = match["entry"]
-    context = "\n".join(lines[context_start:context_end])
-    occurrence_id = generate_occurrence_id(path, root, entry.id, context)
+    
     return Occurrence(
         id=occurrence_id,
         entry_id=entry.id,
