@@ -4,6 +4,7 @@ import os
 import secrets
 import uuid
 import json
+import warnings
 from dataclasses import asdict
 from pathlib import Path
 import subprocess
@@ -11,7 +12,7 @@ import sys
 import re
 from urllib.request import urlopen
 
-from flask import Flask, Response, flash, jsonify, redirect, render_template, request, session, url_for
+from flask import Flask, Response, flash, has_request_context, jsonify, redirect, render_template, request, session, url_for
 from markupsafe import Markup, escape
 
 from glossary_linker.core.compiler import compile_tex, test_environment
@@ -108,7 +109,7 @@ def _get_or_create_wizard_job() -> dict:
         job = asdict(Job(
             id=job_id,
             config=asdict(config),
-            entries=[asdict(e) for e in load_entries_store(ENTRIES_PATH)],
+            entries=[asdict(e) for e in _load_entries_store_safe()],
             paths=[],
             root=str(_path_from(local.default_repo_root or ".", ".")),
             review_order=local.last_review_order or "by_term",
@@ -121,9 +122,10 @@ def _get_or_create_wizard_job() -> dict:
 
 def _refresh_job_from_store(job: dict) -> bool:
     changed = False
-    stored_entries = load_entries_store(ENTRIES_PATH)
-    if stored_entries and not job.get("entries"):
-        job["entries"] = [asdict(entry) for entry in stored_entries]
+    stored_entries = _load_entries_store_safe()
+    stored_payload = [asdict(entry) for entry in stored_entries]
+    if stored_entries and job.get("entries") != stored_payload:
+        job["entries"] = stored_payload
         changed = True
     current_config = job.get("config") if isinstance(job.get("config"), dict) else {}
     disk_config = _load_editorial()
@@ -167,7 +169,45 @@ def _can_open_wizard_step() -> bool:
     return bool(session.get("operation") or session.get("wizard_job_id") or request.values.get("job_id"))
 
 
+def _entries_return_endpoint(target: str | None) -> str:
+    normalized = (target or "").strip()
+    return {
+        "glossary": "glossary_step",
+        "rules": "rules_step",
+        "files": "files_step",
+        "project": "project_step",
+    }.get(normalized, "entries")
+
+
+def _resolve_related_job(job_id: str | None = None) -> dict | None:
+    for candidate in (job_id, request.values.get("job_id"), session.get("wizard_job_id"), session.get("active_job_id")):
+        job = _load_job(candidate)
+        if job:
+            session["wizard_job_id"] = job["id"]
+            session["active_job_id"] = job["id"]
+            return job
+    return None
+
+
+def _ensure_runtime_files() -> None:
+    try:
+        JOBS_DIR.mkdir(parents=True, exist_ok=True)
+        if not EDITORIAL_PATH.exists():
+            save_editorial_config(EditorialConfig(), EDITORIAL_PATH)
+        if not LOCAL_PATH.exists():
+            save_local_config(LocalConfig(), LOCAL_PATH)
+        if not ENTRIES_PATH.exists():
+            save_entries_store([], ENTRIES_PATH)
+    except OSError as exc:
+        warnings.warn(
+            f"Impossibile inizializzare i file locali di Glossary Linker: {exc}. "
+            "L'app proverà comunque a usare i default in memoria.",
+            stacklevel=2,
+        )
+
+
 def create_app() -> Flask:
+    _ensure_runtime_files()
     app = Flask(__name__)
     app.secret_key = os.environ.get("FLASK_SECRET_KEY") or _load_or_generate_secret_key()
 
@@ -178,7 +218,7 @@ def create_app() -> Flask:
         flash(str(error), "error")
         return redirect(url_for("project_step"))
 
-    @app.get("/")
+    @app.route("/", methods=["GET", "POST"])
     def index():
         return project_step()
 
@@ -316,16 +356,20 @@ def create_app() -> Flask:
         if not current:
             return jsonify({"ok": False, "error": "Occurrence not found"}), 404
 
-        _apply_review_action(job, occurrences, current, value)
+        affected = _apply_review_action(job, occurrences, current, value)
         _save_job(job)
         current_index = next((idx for idx, item in enumerate(occurrences) if item.id == occurrence_id), 0)
-        next_index = _next_pending_index(occurrences, job["decisions"], current_index)
-        redirect_url = url_for("output", job_id=job_id) if next_index is None else url_for("review", job_id=job_id, index=next_index)
+        next_index = min(current_index + 1, len(occurrences) - 1)
+        redirect_url = url_for("review", job_id=job_id, index=next_index)
+        review_state = _review_state(occurrences, job["decisions"])
         return jsonify({
             "ok": True,
+            "affected": affected,
             "decisions": job["decisions"],
             "next_index": next_index,
             "redirect_url": redirect_url,
+            "decided": review_state["decided"],
+            "pending": review_state["pending"],
         })
 
     @app.post("/operation")
@@ -414,7 +458,7 @@ def create_app() -> Flask:
         try:
             entries = _load_entries_from_config_path(config)
         except Exception:
-            entries = load_entries_store(ENTRIES_PATH)
+            entries = _load_entries_store_safe()
         return Response(render_glossary_html(entries), mimetype="text/html; charset=utf-8")
 
     @app.get("/environment")
@@ -453,10 +497,15 @@ def create_app() -> Flask:
             save_local_config(local, LOCAL_PATH)
             if not detected:
                 return jsonify({"ok": True, "stats": _entries_stats([], 0), "entries": []})
-            stored = [entry for entry in load_entries_store(ENTRIES_PATH) if entry.id not in set(config.excluded_entry_ids)]
+            stored = [entry for entry in _load_entries_store_safe() if entry.id not in set(config.excluded_entry_ids)]
             entries, new_count = merge_detected_with_store(detected, stored)
             save_entries_store(entries, ENTRIES_PATH)
             _persist_glossary_html(config, local, entries)
+            job = _load_job(payload.get("job_id") or session.get("wizard_job_id"))
+            if job:
+                job["entries"] = [asdict(entry) for entry in entries]
+                job["config"] = asdict(config)
+                _save_job(job)
         except (OSError, UserVisibleError, ValueError) as exc:
             return jsonify({"ok": False, "error": str(exc), "stats": {}}), 400
         return jsonify({"ok": True, "stats": _entries_stats(entries, new_count), "entries": [_entry_payload(entry) for entry in entries]})
@@ -470,7 +519,7 @@ def create_app() -> Flask:
         _update_local_from_payload(local, payload)
         save_editorial_config(config, EDITORIAL_PATH)
         save_local_config(local, LOCAL_PATH)
-        job = _load_job(session.get("wizard_job_id"))
+        job = _load_job(payload.get("job_id") or session.get("wizard_job_id"))
         if job:
             job["config"] = asdict(config)
             job["root"] = local.default_repo_root
@@ -503,13 +552,35 @@ def create_app() -> Flask:
 
     @app.route("/entries", methods=["GET", "POST"])
     def entries():
-        stored = load_entries_store(ENTRIES_PATH)
+        stored = _load_entries_store_safe()
+        return_to = request.values.get("return_to", "")
+        job = _resolve_related_job()
         if request.method == "POST":
             updated = _entries_from_form(stored)
             save_entries_store(updated, ENTRIES_PATH)
+            if job:
+                job["entries"] = [asdict(entry) for entry in updated]
+                _save_job(job)
             flash("Glossario rilevato salvato in glossary-linker.entries.yml.", "success")
-            return redirect(url_for("entries"))
-        return render_template("entries.html", entries=stored, entries_path=ENTRIES_PATH)
+            return_endpoint = _entries_return_endpoint(return_to)
+            if job and return_endpoint != "entries":
+                return redirect(url_for(return_endpoint, job_id=job["id"]))
+            params = {"return_to": return_to} if return_to else {}
+            if job:
+                params["job_id"] = job["id"]
+            return redirect(url_for("entries", **params))
+        wizard_return_url = None
+        return_endpoint = _entries_return_endpoint(return_to)
+        if job and return_endpoint != "entries":
+            wizard_return_url = url_for(return_endpoint, job_id=job["id"])
+        return render_template(
+            "entries.html",
+            entries=stored,
+            entries_path=ENTRIES_PATH,
+            job_id=job["id"] if job else "",
+            return_to=return_to,
+            wizard_return_url=wizard_return_url,
+        )
 
     @app.route("/format-glossary", methods=["GET", "POST"])
     def format_glossary():
@@ -574,22 +645,28 @@ def create_app() -> Flask:
         index = min(max(index, 0), len(occurrences) - 1)
         if request.method == "POST":
             action = request.form.get("action", "next")
-            current = occurrences[index]
-            _apply_review_action(job, occurrences, current, action)
-            _save_job(job)
             if action == "prev":
                 index = max(0, index - 1)
+            elif action == "next":
+                index = min(len(occurrences) - 1, index + 1)
+            elif action == "next_pending":
+                next_index = _next_pending_index(occurrences, job["decisions"], index)
+                if next_index is None and occurrences[index].id not in job["decisions"]:
+                    next_index = index
+                if next_index is None:
+                    flash("Tutte le occorrenze hanno già una scelta. Puoi rivederle o andare al report.", "info")
+                else:
+                    index = next_index
             elif action == "finish":
                 return redirect(url_for("output", job_id=job_id))
             elif action in _decision_actions():
-                next_index = _next_pending_index(occurrences, job["decisions"], index)
-                if next_index is None:
-                    return redirect(url_for("output", job_id=job_id))
-                index = next_index
-            elif index + 1 >= len(occurrences):
-                return redirect(url_for("output", job_id=job_id))
-            else:
-                index += 1
+                current = occurrences[index]
+                affected = _apply_review_action(job, occurrences, current, action)
+                _save_job(job)
+                if action in _bulk_decision_actions():
+                    flash(f"Scelte aggiornate: {affected} occorrenze.", "success")
+                else:
+                    index = min(len(occurrences) - 1, index + 1)
             return redirect(url_for("review", job_id=job_id, index=index))
 
         occurrence = occurrences[index]
@@ -602,6 +679,7 @@ def create_app() -> Flask:
         entry = next((item for item in entries if item.id == occurrence.entry_id), GlossaryEntry(occurrence.entry_id, occurrence.term))
         same_term = [item for item in occurrences if item.entry_id == occurrence.entry_id]
         term_ids = list(dict.fromkeys(item.entry_id for item in occurrences))
+        review_state = _review_state(occurrences, job["decisions"])
         return render_template(
             "review.html",
             job_id=job_id,
@@ -615,6 +693,9 @@ def create_app() -> Flask:
             term_index=term_ids.index(occurrence.entry_id) + 1,
             term_total=len(term_ids),
             decision=decision,
+            decided_count=review_state["decided"],
+            pending_count=review_state["pending"],
+            summary_items=_review_summary_items(occurrences, job["decisions"], index),
             previous_step_url=url_for("glossary_step", job_id=job_id),
         )
 
@@ -659,9 +740,6 @@ def create_app() -> Flask:
         if mode not in {"linked", "overwrite"}:
             flash(f"Modalità di salvataggio non valida: {mode}.", "error")
             return redirect(url_for("output", job_id=job_id))
-        if mode == "overwrite" and request.form.get("confirm_overwrite") != "1":
-            flash("Sorgenti non sovrascritti: seleziona e conferma esplicitamente l'opzione Sovrascrivi sorgenti.", "warning")
-            return redirect(url_for("output", job_id=job_id))
         source = request.form.get("source", "")
         saved: list[str] = []
         errors: list[str] = []
@@ -670,13 +748,14 @@ def create_app() -> Flask:
                 errors.append("Risultato ignorato perché il job contiene dati corrotti.")
                 continue
             try:
-                if source and item["source"] != source:
+                source_path, output_path = _validated_result_paths(item)
+                if source and str(source_path) != source:
                     continue
-                target = Path(item["source"]) if mode == "overwrite" else Path(item["output"])
+                target = source_path if mode == "overwrite" else output_path
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_text(str(item.get("text", "")), encoding="utf-8")
                 saved.append(str(target))
-            except (KeyError, OSError) as exc:
+            except (KeyError, OSError, UserVisibleError) as exc:
                 errors.append(f"Impossibile salvare {item.get('output') or item.get('source') or 'risultato'}: {exc}")
         if request.form.get("include_report"):
             if not job.get("report"):
@@ -712,12 +791,14 @@ def create_app() -> Flask:
         for item in job.get("results", []):
             if not isinstance(item, dict):
                 continue
-            if item.get("source") == source:
+            try:
+                source_path, output_path = _validated_result_paths(item)
+            except UserVisibleError as exc:
+                flash(str(exc), "error")
+                continue
+            if str(source_path) == source:
                 matched = True
-                if not item.get("output"):
-                    flash("Risultato incompleto: output .linked.tex mancante.", "error")
-                    return redirect(url_for("output", job_id=job_id))
-                target = Path(item["output"])
+                target = output_path
                 try:
                     target.write_text(str(item.get("text", "")), encoding="utf-8")
                 except OSError as exc:
@@ -751,7 +832,6 @@ def _load_or_generate_secret_key() -> str:
         key_path.write_text(key, encoding="utf-8")
         key_path.chmod(0o600)
     except OSError as exc:
-        import warnings
         warnings.warn(
             f"Impossibile salvare la chiave segreta in {key_path}: {exc}. "
             "Le sessioni non sopravviveranno al riavvio del server.",
@@ -761,13 +841,34 @@ def _load_or_generate_secret_key() -> str:
 
 
 def _load_editorial() -> EditorialConfig:
-    return load_editorial_config(EDITORIAL_PATH)
+    try:
+        return load_editorial_config(EDITORIAL_PATH)
+    except (OSError, ValueError, TypeError) as exc:
+        _surface_local_state_warning(f"Configurazione editoriale non leggibile: {exc}. Uso i default in memoria.")
+        return EditorialConfig()
 
 
 def _load_local() -> LocalConfig:
-    if LOCAL_PATH.exists():
-        return load_local_config(LOCAL_PATH)
+    try:
+        if LOCAL_PATH.exists():
+            return load_local_config(LOCAL_PATH)
+    except (OSError, ValueError, TypeError) as exc:
+        _surface_local_state_warning(f"Configurazione locale non leggibile: {exc}. Uso i default in memoria.")
     return LocalConfig()
+
+
+def _load_entries_store_safe() -> list[GlossaryEntry]:
+    try:
+        return load_entries_store(ENTRIES_PATH)
+    except (OSError, ValueError, TypeError) as exc:
+        _surface_local_state_warning(f"Glossario rilevato non leggibile: {exc}. La lista viene trattata come vuota.")
+        return []
+
+
+def _surface_local_state_warning(message: str) -> None:
+    warnings.warn(message, stacklevel=2)
+    if has_request_context():
+        flash(message, "warning")
 
 
 def _int_from_form(name: str, fallback: int, minimum: int | None = None, maximum: int | None = None) -> int:
@@ -1347,6 +1448,9 @@ def _start_job_processing(job: dict):
     except UserVisibleError as exc:
         flash(str(exc), "error")
         return redirect(url_for("glossary_step", job_id=job.get("id")))
+    stored_entries = _load_entries_store_safe()
+    if stored_entries:
+        entries = stored_entries
     local = _load_local()
     operation = session.get("operation", "link-documents")
     
@@ -1381,6 +1485,9 @@ def _start_job_processing(job: dict):
     job["occurrences"] = [asdict(o) for o in occurrences]
     job["entries"] = [asdict(e) for e in entries]
     job["config"] = asdict(config)
+    job["decisions"] = {}
+    job["results"] = []
+    job["report"] = None
     
     _save_job(job)
     
@@ -1455,27 +1562,76 @@ def _output_item(result, root: Path) -> dict[str, object]:
     }
 
 
-def _apply_review_action(job: dict, occurrences: list[Occurrence], current: Occurrence, action: str) -> None:
+def _validated_result_paths(item: dict) -> tuple[Path, Path]:
+    source_raw = str(item.get("source") or "").strip()
+    output_raw = str(item.get("output") or "").strip()
+    if not source_raw or not output_raw:
+        raise UserVisibleError("Risultato incompleto: sorgente o output mancante.")
+    source_path = Path(source_raw).expanduser().resolve()
+    output_path = Path(output_raw).expanduser().resolve()
+    expected_output = source_path.with_name(source_path.stem + ".linked.tex")
+    if output_path != expected_output:
+        raise UserVisibleError(
+            f"Target output inatteso per {source_path.name}: atteso {expected_output.name}, trovato {output_path.name}."
+        )
+    return source_path, output_path
+
+
+def _apply_review_action(job: dict, occurrences: list[Occurrence], current: Occurrence, action: str) -> int:
     decisions = job["decisions"]
+    affected = 0
+
+    def set_decision(occurrence: Occurrence, value: bool) -> None:
+        nonlocal affected
+        if decisions.get(occurrence.id) != value:
+            affected += 1
+        decisions[occurrence.id] = value
+
     if action == "link":
-        decisions[current.id] = True
+        set_decision(current, True)
     elif action == "skip":
-        decisions[current.id] = False
+        set_decision(current, False)
     elif action in {"link_file_term", "skip_file_term", "link_term_all", "skip_term_all", "skip_file"}:
         value = action.startswith("link")
         for occurrence in occurrences:
             same_term = occurrence.entry_id == current.entry_id
             same_file = occurrence.file_path == current.file_path
             if action in {"link_file_term", "skip_file_term"} and same_term and same_file:
-                decisions[occurrence.id] = value
+                set_decision(occurrence, value)
             elif action in {"link_term_all", "skip_term_all"} and same_term:
-                decisions[occurrence.id] = value
+                set_decision(occurrence, value)
             elif action == "skip_file" and same_file:
-                decisions[occurrence.id] = False
+                set_decision(occurrence, False)
+    return affected
 
 
 def _decision_actions() -> set[str]:
-    return {"link", "skip", "link_file_term", "skip_file_term", "link_term_all", "skip_term_all", "skip_file"}
+    return {"link", "skip"} | _bulk_decision_actions()
+
+
+def _bulk_decision_actions() -> set[str]:
+    return {"link_file_term", "skip_file_term", "link_term_all", "skip_term_all", "skip_file"}
+
+
+def _review_state(occurrences: list[Occurrence], decisions: dict[str, bool]) -> dict[str, int]:
+    decided = sum(1 for occurrence in occurrences if occurrence.id in decisions)
+    return {"decided": decided, "pending": max(0, len(occurrences) - decided)}
+
+
+def _review_summary_items(occurrences: list[Occurrence], decisions: dict[str, bool], current_index: int) -> list[dict[str, object]]:
+    items: list[dict[str, object]] = []
+    for index, occurrence in enumerate(occurrences):
+        decision = decisions.get(occurrence.id)
+        items.append({
+            "index": index,
+            "term": occurrence.term,
+            "file": occurrence.file_path.name,
+            "line": occurrence.line_number,
+            "decision": "Collega" if decision is True else "Salta" if decision is False else "Da decidere",
+            "decision_class": "linked" if decision is True else "skipped" if decision is False else "pending",
+            "current": index == current_index,
+        })
+    return items
 
 
 def _next_pending_index(occurrences: list[Occurrence], decisions: dict[str, bool], current_index: int) -> int | None:

@@ -1,6 +1,8 @@
 from glossary_linker.core.config import EditorialConfig
 from glossary_linker.core.formatter import format_glossary_text
-from glossary_linker.core.glossary import merge_detected_with_store, parse_glossary_text
+import pytest
+
+from glossary_linker.core.glossary import load_entries_store, merge_detected_with_store, parse_glossary_text, save_entries_store
 from glossary_linker.core.models import GlossaryEntry
 
 
@@ -139,3 +141,34 @@ Documento tecnico.
     entries = parse_glossary_text(text, EditorialConfig(glossary_detection="subsection"))
 
     assert entries[0].definition == "Documento tecnico."
+
+
+def test_entries_store_coerces_string_aliases_and_rejects_bad_shape(tmp_path):
+    path = tmp_path / "entries.yml"
+    path.write_text(
+        """
+entries:
+  - id: voce
+    term: Voce
+    aliases: alias uno, alias due
+""",
+        encoding="utf-8",
+    )
+
+    entries = load_entries_store(path)
+
+    assert entries[0].aliases == ["alias uno", "alias due"]
+
+    path.write_text("- not-a-mapping", encoding="utf-8")
+    with pytest.raises(ValueError, match="must contain a mapping"):
+        load_entries_store(path)
+
+
+def test_save_entries_store_is_atomic_and_creates_parent(tmp_path):
+    path = tmp_path / "nested" / "entries.yml"
+
+    save_entries_store([GlossaryEntry("voce", "Voce")], path)
+
+    assert path.exists()
+    assert load_entries_store(path)[0].id == "voce"
+    assert not path.with_suffix(".yml.tmp").exists()

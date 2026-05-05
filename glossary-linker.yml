@@ -14,7 +14,12 @@ exclude_file_patterns:
 - '**/dist/**'
 - '**/tmp/**'
 - '**/prove/**'
+- '**/bozze/**'
+- '**/prompt/**'
 - '**/prompt.tex'
+- '**/*prompt*.tex'
+- '**/*prova*.tex'
+- '**/*bozza*.tex'
 ignored_environments:
 - verbatim
 - lstlisting
@@ -33,8 +38,10 @@ ignored_commands:
 - paragraph
 - subparagraph
 - title
+- author
+- date
 - caption
 ignored_sections:
-- frontespizio
 - indice
+- frontespizio
 entries: {}

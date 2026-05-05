@@ -21,10 +21,10 @@
       <p>Controlla i risultati prima di salvare. Puoi produrre copie <code>.linked.tex</code> oppure sovrascrivere i sorgenti solo da questa schermata.</p>
     </div>
     <div class="page-actions">
-      <a class="button-link" href="{{ previous_step_url }}">Indietro</a>
-      <a class="button-link" href="{{ url_for('project_step') }}">Home</a>
+      <a class="button-link button-back" href="{{ previous_step_url }}">Indietro</a>
+      <a class="button-link button-home" href="{{ url_for('project_step') }}">Home</a>
       {% if has_review %}
-        <a class="button-link" href="{{ url_for('review', job_id=job_id, index=0) }}">Rivedi decisioni</a>
+        <a class="button-link button-accent" href="{{ url_for('review', job_id=job_id, index=0) }}">Rivedi decisioni</a>
       {% endif %}
     </div>
   </div>
@@ -110,10 +110,7 @@
           </select>
         </label>
       </fieldset>
-      <label class="check overwrite-confirm">
-        <input type="checkbox" name="confirm_overwrite" value="1">
-        Confermo la sovrascrittura dei sorgenti se seleziono questa modalità
-      </label>
+      <p class="destructive-note" role="note">La modalità <strong>Sovrascrivi i sorgenti</strong> modifica direttamente i file <code>.tex</code> originali. Usa <code>.linked.tex</code> quando vuoi una verifica non distruttiva.</p>
       <button class="primary" type="submit">Salva tutti i file</button>
     </form>
   </section>
@@ -158,11 +155,8 @@
           <form method="post" action="{{ url_for('save_output', job_id=job_id) }}" class="overwrite-file-form">
             <input type="hidden" name="source" value="{{ result.source }}">
             <input type="hidden" name="mode" value="overwrite">
-            <label class="check">
-              <input type="checkbox" name="confirm_overwrite" value="1">
-              Confermo la sovrascrittura di questo sorgente
-            </label>
-            <button type="submit">Sovrascrivi sorgente</button>
+            <p class="destructive-note">Questa azione aggiorna il file sorgente selezionato invece della copia <code>.linked.tex</code>.</p>
+            <button class="danger-action" type="submit">Sovrascrivi sorgente</button>
           </form>
           <form method="post" action="{{ url_for('compile_output', job_id=job_id) }}" class="compile-form">
             <input type="hidden" name="source" value="{{ result.source }}">
@@ -180,7 +174,7 @@
   </div>
 
   <div class="output-footer">
-    <a class="button-link primary-link" href="{{ url_for('project_step') }}">Torna alla home</a>
+    <a class="button-link button-home" href="{{ url_for('project_step') }}">Torna alla home</a>
   </div>
 </section>
 {% endblock %}

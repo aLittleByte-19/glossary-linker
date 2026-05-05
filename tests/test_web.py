@@ -1,5 +1,7 @@
 from dataclasses import asdict
 
+import pytest
+
 from glossary_linker.core.config import EditorialConfig, LocalConfig, save_editorial_config, save_local_config
 from glossary_linker.core.glossary import load_entries_store, save_entries_store
 from glossary_linker.core.linker import collect_manual_occurrences, link_file
@@ -28,6 +30,27 @@ def test_operation_progress_keeps_glossary_disabled_before_choice():
     assert '<span class="disabled">Glossario</span>' in html
 
 
+def test_home_form_posts_to_project_step():
+    app = create_app()
+    client = app.test_client()
+
+    response = client.get("/")
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert 'form method="post" action="/project"' in html
+
+
+def test_root_post_supports_format_glossary_operation():
+    app = create_app()
+    client = app.test_client()
+
+    response = client.post("/", data={"operation": "format-glossary"})
+
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/format-glossary")
+
+
 def test_save_output_generates_report_only_when_requested(monkeypatch, tmp_path):
     import glossary_linker.web.app as webapp
     monkeypatch.setattr(webapp, "JOBS_DIR", tmp_path / "jobs")
@@ -52,15 +75,8 @@ def test_save_output_generates_report_only_when_requested(monkeypatch, tmp_path)
     assert output.read_text(encoding="utf-8") == "linked"
     assert calls == []
 
-    response = client.post(f"/save/{job_id}", data={"mode": "overwrite", "include_report": "1", "report_format": "json"})
-
-    assert response.status_code == 302
-    assert source.read_text(encoding="utf-8") == "original"
-    assert calls == []
-
     response = client.post(f"/save/{job_id}", data={
         "mode": "overwrite",
-        "confirm_overwrite": "1",
         "include_report": "1",
         "report_format": "json",
     })
@@ -187,6 +203,43 @@ def test_entries_page_is_only_for_modes_and_aliases(monkeypatch, tmp_path):
     assert entries[0].mode == "manual"
 
 
+def test_entries_save_returns_to_glossary_and_updates_job(monkeypatch, tmp_path):
+    import glossary_linker.web.app as webapp
+
+    entries_path = tmp_path / "entries.yml"
+    jobs_dir = tmp_path / "jobs"
+    save_entries_store([GlossaryEntry("voce-buona", "Voce Buona")], entries_path)
+    monkeypatch.setattr(webapp, "ENTRIES_PATH", entries_path)
+    monkeypatch.setattr(webapp, "JOBS_DIR", jobs_dir)
+    app = create_app()
+    client = app.test_client()
+    _save_job({
+        "id": "wizard-entries",
+        "config": asdict(EditorialConfig()),
+        "entries": [asdict(GlossaryEntry("voce-buona", "Voce Buona", mode="automatic"))],
+        "paths": [],
+        "root": str(tmp_path),
+        "review_order": "by_term",
+    })
+
+    response = client.post("/entries?job_id=wizard-entries&return_to=glossary", data={
+        "job_id": "wizard-entries",
+        "return_to": "glossary",
+        "entry_id": ["voce-buona"],
+        "aliases_voce-buona": "alias",
+        "mode_voce-buona": "manual",
+    }, follow_redirects=True)
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "Avvia elaborazione" in html
+    assert 'badge manual' in html
+    saved_job = _load_job("wizard-entries")
+    assert saved_job is not None
+    assert saved_job["entries"][0]["mode"] == "manual"
+    assert saved_job["entries"][0]["aliases"] == ["alias"]
+
+
 def test_format_glossary_flow_uses_glossary_input_without_project_root():
     app = create_app()
     client = app.test_client()
@@ -235,6 +288,52 @@ def test_settings_persist_glossary_paths(monkeypatch, tmp_path):
     assert response.status_code == 302
     assert saved.glossary_path == "docs/Glossario.tex"
     assert saved.glossary_html_path == "public/Glossario.html"
+
+
+def test_create_app_bootstraps_runtime_files(monkeypatch, tmp_path):
+    import glossary_linker.web.app as webapp
+
+    monkeypatch.setattr(webapp, "EDITORIAL_PATH", tmp_path / "glossary-linker.yml")
+    monkeypatch.setattr(webapp, "LOCAL_PATH", tmp_path / "glossary-linker.local.yml")
+    monkeypatch.setattr(webapp, "ENTRIES_PATH", tmp_path / "glossary-linker.entries.yml")
+    monkeypatch.setattr(webapp, "JOBS_DIR", tmp_path / ".glossary-linker" / "jobs")
+
+    create_app()
+
+    assert webapp.EDITORIAL_PATH.exists()
+    assert webapp.LOCAL_PATH.exists()
+    assert webapp.ENTRIES_PATH.exists()
+    assert webapp.JOBS_DIR.exists()
+    assert (tmp_path / ".glossary-linker-secret").exists()
+    assert load_entries_store(webapp.ENTRIES_PATH) == []
+
+
+def test_output_page_no_longer_requires_overwrite_confirmation_checkbox(monkeypatch, tmp_path):
+    import glossary_linker.web.app as webapp
+
+    monkeypatch.setattr(webapp, "JOBS_DIR", tmp_path / "jobs")
+    app = create_app()
+    client = app.test_client()
+    source = tmp_path / "doc.tex"
+    source.write_text("ciao", encoding="utf-8")
+    _save_job({
+        "id": "output-ui",
+        "config": asdict(EditorialConfig()),
+        "entries": [asdict(GlossaryEntry("ciao", "Ciao"))],
+        "paths": [str(source)],
+        "root": str(tmp_path),
+        "excluded": [],
+        "warnings": [],
+        "occurrences": [],
+        "decisions": {},
+    })
+
+    response = client.get("/output/output-ui")
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "confirm_overwrite" not in html
+    assert "modifica direttamente i file" in html
 
 
 def test_format_glossary_preview_confirms_detected_entries(monkeypatch, tmp_path):
@@ -320,7 +419,7 @@ def test_review_decision_api_saves_and_returns_next_url(monkeypatch, tmp_path):
     client = app.test_client()
     source = tmp_path / "doc.tex"
     source.write_text("Termine Manuale", encoding="utf-8")
-    occurrence = {
+    occurrence_1 = {
         "id": "occ-1",
         "entry_id": "termine-manuale",
         "term": "Termine Manuale",
@@ -332,13 +431,14 @@ def test_review_decision_api_saves_and_returns_next_url(monkeypatch, tmp_path):
         "start": 0,
         "end": 15,
     }
+    occurrence_2 = {**occurrence_1, "id": "occ-2", "line_number": 2, "start": 16, "end": 31}
     _save_job({
         "id": "ajax-job",
         "config": asdict(EditorialConfig()),
         "entries": [asdict(GlossaryEntry("termine-manuale", "Termine Manuale", mode="manual"))],
         "paths": [str(source)],
         "root": str(tmp_path),
-        "occurrences": [occurrence],
+        "occurrences": [occurrence_1, occurrence_2],
         "decisions": {},
     })
 
@@ -347,14 +447,117 @@ def test_review_decision_api_saves_and_returns_next_url(monkeypatch, tmp_path):
 
     assert response.status_code == 200
     assert payload["ok"] is True
-    assert payload["redirect_url"].endswith("/output/ajax-job")
+    assert payload["redirect_url"].endswith("/review/ajax-job/1")
     assert _load_job("ajax-job")["decisions"] == {"occ-1": True}
+
+
+def test_review_decision_api_does_not_auto_finish_on_last_occurrence(monkeypatch, tmp_path):
+    import glossary_linker.web.app as webapp
+
+    monkeypatch.setattr(webapp, "JOBS_DIR", tmp_path / "jobs")
+    app = create_app()
+    client = app.test_client()
+    source = tmp_path / "doc.tex"
+    source.write_text("Termine Manuale", encoding="utf-8")
+    _save_job({
+        "id": "ajax-last",
+        "config": asdict(EditorialConfig()),
+        "entries": [asdict(GlossaryEntry("termine-manuale", "Termine Manuale", mode="manual"))],
+        "paths": [str(source)],
+        "root": str(tmp_path),
+        "occurrences": [{
+            "id": "occ-1",
+            "entry_id": "termine-manuale",
+            "term": "Termine Manuale",
+            "visible_text": "Termine Manuale",
+            "file_path": str(source),
+            "line_number": 1,
+            "section": "",
+            "context": "Termine Manuale",
+            "start": 0,
+            "end": 15,
+        }],
+        "decisions": {},
+    })
+
+    response = client.post("/api/decision/ajax-last", json={"occurrence_id": "occ-1", "value": "skip"})
+    payload = response.get_json()
+
+    assert response.status_code == 200
+    assert payload["redirect_url"].endswith("/review/ajax-last/0")
+    assert payload["pending"] == 0
+    assert _load_job("ajax-last")["decisions"] == {"occ-1": False}
+
+
+def test_review_bulk_actions_stay_in_review(monkeypatch, tmp_path):
+    import glossary_linker.web.app as webapp
+
+    monkeypatch.setattr(webapp, "JOBS_DIR", tmp_path / "jobs")
+    app = create_app()
+    client = app.test_client()
+    source = tmp_path / "doc.tex"
+    source.write_text("Termine Manuale\nTermine Manuale", encoding="utf-8")
+    base_occurrence = {
+        "entry_id": "termine-manuale",
+        "term": "Termine Manuale",
+        "visible_text": "Termine Manuale",
+        "file_path": str(source),
+        "section": "",
+        "context": "Termine Manuale",
+    }
+    _save_job({
+        "id": "bulk-review",
+        "config": asdict(EditorialConfig()),
+        "entries": [asdict(GlossaryEntry("termine-manuale", "Termine Manuale", mode="manual"))],
+        "paths": [str(source)],
+        "root": str(tmp_path),
+        "occurrences": [
+            {**base_occurrence, "id": "occ-1", "line_number": 1, "start": 0, "end": 15},
+            {**base_occurrence, "id": "occ-2", "line_number": 2, "start": 16, "end": 31},
+        ],
+        "decisions": {},
+    })
+
+    response = client.post("/review/bulk-review/0", data={"action": "skip_file"})
+
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/review/bulk-review/0")
+    assert _load_job("bulk-review")["decisions"] == {"occ-1": False, "occ-2": False}
+
+
+def test_review_prev_button_moves_to_previous_occurrence(monkeypatch, tmp_path):
+    import glossary_linker.web.app as webapp
+
+    monkeypatch.setattr(webapp, "JOBS_DIR", tmp_path / "jobs")
+    app = create_app()
+    client = app.test_client()
+    source = tmp_path / "doc.tex"
+    source.write_text("Termine Manuale\nTermine Manuale", encoding="utf-8")
+    _save_job({
+        "id": "prev-review",
+        "config": asdict(EditorialConfig()),
+        "entries": [asdict(GlossaryEntry("termine-manuale", "Termine Manuale", mode="manual"))],
+        "paths": [str(source)],
+        "root": str(tmp_path),
+        "occurrences": [
+            {"id": "occ-1", "entry_id": "termine-manuale", "term": "Termine Manuale", "visible_text": "Termine Manuale", "file_path": str(source), "line_number": 1, "section": "", "context": "Termine Manuale", "start": 0, "end": 15},
+            {"id": "occ-2", "entry_id": "termine-manuale", "term": "Termine Manuale", "visible_text": "Termine Manuale", "file_path": str(source), "line_number": 2, "section": "", "context": "Termine Manuale", "start": 16, "end": 31},
+        ],
+        "decisions": {},
+    })
+
+    response = client.post("/review/prev-review/1", data={"action": "prev"})
+
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/review/prev-review/0")
 
 
 def test_wizard_steps_resume_saved_job_from_review_back_link(monkeypatch, tmp_path):
     import glossary_linker.web.app as webapp
 
     monkeypatch.setattr(webapp, "JOBS_DIR", tmp_path / "jobs")
+    monkeypatch.setattr(webapp, "ENTRIES_PATH", tmp_path / "entries.yml")
+    save_entries_store([GlossaryEntry("termine-manuale", "Termine Manuale", mode="manual")], webapp.ENTRIES_PATH)
     app = create_app()
     client = app.test_client()
     source = tmp_path / "doc.tex"
@@ -383,7 +586,7 @@ def test_wizard_steps_resume_saved_job_from_review_back_link(monkeypatch, tmp_pa
     review_html = client.get("/review/resume-job/0").get_data(as_text=True)
     glossary_html = client.get("/glossary?job_id=resume-job").get_data(as_text=True)
 
-    assert 'href="/glossary?job_id=resume-job">Indietro</a>' in review_html
+    assert 'href="/glossary?job_id=resume-job">Torna al glossario</a>' in review_html
     assert "Termine Manuale" in glossary_html
     assert _load_job("resume-job")["paths"] == [str(source)]
 
@@ -490,6 +693,86 @@ def test_save_output_rejects_unknown_mode(monkeypatch, tmp_path):
     assert not output.exists()
 
 
+def test_save_output_rejects_tampered_linked_target(monkeypatch, tmp_path):
+    import glossary_linker.web.app as webapp
+
+    monkeypatch.setattr(webapp, "JOBS_DIR", tmp_path / "jobs")
+    app = create_app()
+    client = app.test_client()
+    source = tmp_path / "doc.tex"
+    source.write_text("original", encoding="utf-8")
+    tampered = tmp_path / "other.tex"
+    _save_job({
+        "id": "tampered-output",
+        "results": [{"source": str(source), "output": str(tampered), "text": "linked"}],
+        "report": asdict(ProcessingReport()),
+    })
+
+    response = client.post("/save/tampered-output", data={"mode": "linked"})
+
+    assert response.status_code == 302
+    assert not tampered.exists()
+
+
+def test_compile_output_rejects_tampered_result_path(monkeypatch, tmp_path):
+    import glossary_linker.web.app as webapp
+
+    monkeypatch.setattr(webapp, "JOBS_DIR", tmp_path / "jobs")
+    app = create_app()
+    client = app.test_client()
+    source = tmp_path / "doc.tex"
+    source.write_text("original", encoding="utf-8")
+    tampered = tmp_path / "other.tex"
+    _save_job({
+        "id": "tampered-compile",
+        "results": [{"source": str(source), "output": str(tampered), "text": "linked"}],
+        "report": asdict(ProcessingReport()),
+    })
+
+    response = client.post("/compile/tampered-compile", data={"source": str(source)})
+
+    assert response.status_code == 302
+    assert not tampered.exists()
+
+
+def test_home_survives_corrupt_entries_store(monkeypatch, tmp_path):
+    import glossary_linker.web.app as webapp
+
+    entries_path = tmp_path / "entries.yml"
+    entries_path.write_text("- not-a-mapping", encoding="utf-8")
+    monkeypatch.setattr(webapp, "ENTRIES_PATH", entries_path)
+    app = create_app()
+    client = app.test_client()
+
+    with pytest.warns(UserWarning, match="Glossario rilevato non leggibile"):
+        response = client.get("/")
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "Glossario rilevato non leggibile" in html
+
+
+def test_wizard_state_uses_payload_job_id_without_session(monkeypatch, tmp_path):
+    import glossary_linker.web.app as webapp
+
+    monkeypatch.setattr(webapp, "JOBS_DIR", tmp_path / "jobs")
+    app = create_app()
+    client = app.test_client()
+    _save_job({
+        "id": "payload-job",
+        "config": asdict(EditorialConfig()),
+        "entries": [],
+        "paths": [],
+        "root": str(tmp_path),
+        "review_order": "by_term",
+    })
+
+    response = client.post("/wizard-state", json={"job_id": "payload-job", "tex_paths": "doc.tex"})
+
+    assert response.status_code == 200
+    assert _load_job("payload-job")["paths"] == ["doc.tex"]
+
+
 def test_review_decision_api_reports_malformed_occurrence(monkeypatch, tmp_path):
     import glossary_linker.web.app as webapp
 
@@ -535,6 +818,78 @@ def test_glossary_preview_does_not_clear_source_when_payload_omits_field(monkeyp
     assert response.status_code == 200
     assert response.get_json()["stats"]["total"] == 1
     assert webapp.load_editorial_config(editorial_path).glossary_path == "Glossario.tex"
+
+
+def test_glossary_preview_updates_active_wizard_job(monkeypatch, tmp_path):
+    import glossary_linker.web.app as webapp
+
+    glossary = tmp_path / "Glossario.tex"
+    glossary.write_text("\\begin{document}\\subsection{Voce Nuova}Definizione.\\end{document}", encoding="utf-8")
+    editorial_path = tmp_path / "glossary-linker.yml"
+    local_path = tmp_path / "glossary-linker.local.yml"
+    entries_path = tmp_path / "entries.yml"
+    monkeypatch.setattr(webapp, "EDITORIAL_PATH", editorial_path)
+    monkeypatch.setattr(webapp, "LOCAL_PATH", local_path)
+    monkeypatch.setattr(webapp, "ENTRIES_PATH", entries_path)
+    monkeypatch.setattr(webapp, "JOBS_DIR", tmp_path / "jobs")
+    save_editorial_config(EditorialConfig(glossary_path="Glossario.tex", glossary_detection="subsection"), editorial_path)
+    save_local_config(LocalConfig(default_repo_root=str(tmp_path)), local_path)
+    _save_job({
+        "id": "preview-job",
+        "config": asdict(EditorialConfig(glossary_path="Glossario.tex", glossary_detection="subsection")),
+        "entries": [],
+        "paths": [],
+        "root": str(tmp_path),
+        "decisions": {},
+    })
+    app = create_app()
+    client = app.test_client()
+
+    response = client.post("/glossary-preview", json={"job_id": "preview-job"})
+
+    assert response.status_code == 200
+    assert _load_job("preview-job")["entries"][0]["id"] == "voce-nuova"
+
+
+def test_rerunning_processing_uses_updated_entries_and_resets_decisions(monkeypatch, tmp_path):
+    import glossary_linker.web.app as webapp
+
+    entries_path = tmp_path / "entries.yml"
+    jobs_dir = tmp_path / "jobs"
+    source = tmp_path / "doc.tex"
+    source.write_text("Voce Nuova", encoding="utf-8")
+    save_entries_store([GlossaryEntry("voce-nuova", "Voce Nuova", mode="manual")], entries_path)
+    monkeypatch.setattr(webapp, "ENTRIES_PATH", entries_path)
+    monkeypatch.setattr(webapp, "JOBS_DIR", jobs_dir)
+    app = create_app()
+    client = app.test_client()
+    _save_job({
+        "id": "rerun-job",
+        "config": asdict(EditorialConfig(glossary_html_url="http://127.0.0.1:8765/glossary-html")),
+        "entries": [asdict(GlossaryEntry("voce-vecchia", "Voce Vecchia", mode="manual"))],
+        "paths": [str(source)],
+        "root": str(tmp_path),
+        "review_order": "by_term",
+        "occurrences": [],
+        "decisions": {"stale-occurrence": True},
+        "results": [{"source": str(source), "output": str(tmp_path / "doc.linked.tex"), "text": "stale"}],
+        "report": asdict(ProcessingReport()),
+    })
+
+    response = client.post("/glossary?job_id=rerun-job", data={
+        "glossary_html_url": "http://127.0.0.1:8765/glossary-html",
+        "entry_id": ["voce-nuova"],
+        "action": "continue",
+    })
+    job = _load_job("rerun-job")
+
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/review/rerun-job/0")
+    assert job["entries"][0]["id"] == "voce-nuova"
+    assert job["occurrences"][0]["entry_id"] == "voce-nuova"
+    assert job["decisions"] == {}
+    assert job["results"] == []
+    assert job["report"] is None
 
 
 def test_glossary_preview_rejects_directory_source_with_clear_message(monkeypatch, tmp_path):

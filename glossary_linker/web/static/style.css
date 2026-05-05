@@ -237,6 +237,7 @@ a {
 .flow-actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
   justify-content: flex-end;
 }
@@ -832,6 +833,28 @@ button {
   transition: background-color var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast);
 }
 
+.button-link.button-back {
+  color: var(--ink);
+  background: var(--surface-soft);
+  border-color: var(--line-strong);
+}
+
+.button-link.button-back::before {
+  content: "‹";
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.button-link.button-home {
+  color: var(--muted);
+}
+
+.button-link.button-accent {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--line));
+}
+
 .button-link:hover,
 .button-link:focus-visible {
   color: var(--accent);
@@ -841,6 +864,18 @@ button {
 
 .button-link:focus-visible {
   outline: 3px solid var(--accent-soft);
+}
+
+.button-link.button-home:hover,
+.button-link.button-home:focus-visible {
+  color: var(--ink);
+}
+
+.button-link.button-accent:hover,
+.button-link.button-accent:focus-visible {
+  color: var(--accent-strong);
+  background: #e5eef5;
+  border-color: var(--accent);
 }
 
 .rule-editor {
@@ -1914,6 +1949,50 @@ pre {
   font-weight: 700;
 }
 
+.nav-button-forward {
+  color: #ffffff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.nav-button-forward:hover,
+.nav-button-forward:focus-visible {
+  color: #ffffff;
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+}
+
+.review-command-bar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.review-progress-panel {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.review-progress-panel div {
+  display: grid;
+  gap: 2px;
+  padding: 14px;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.review-progress-panel strong {
+  font-size: 1.45rem;
+  line-height: 1.1;
+}
+
+.review-progress-panel span {
+  color: var(--muted);
+}
+
 button:disabled {
   cursor: not-allowed;
   opacity: 0.45;
@@ -1922,7 +2001,8 @@ button:disabled {
 .review-term,
 .review-position,
 .review-context-block,
-.decision-panel {
+.decision-panel,
+.review-summary-panel {
   padding: clamp(16px, 2.3vw, 22px);
   background: var(--surface-soft);
   border: 1px solid var(--line);
@@ -2088,6 +2168,86 @@ button:disabled {
   gap: 10px;
 }
 
+.bulk-action-buttons.single-action {
+  grid-template-columns: 1fr;
+}
+
+.review-choice-list {
+  display: grid;
+  gap: 8px;
+  max-height: 360px;
+  margin: 14px 0 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.review-choice-list a {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) minmax(120px, auto) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 48px;
+  padding: 9px 10px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  text-decoration: none;
+}
+
+.review-choice-list li.current a {
+  border-color: var(--accent);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.review-choice-list span {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 800;
+  background: var(--surface-soft);
+  border-radius: 6px;
+}
+
+.review-choice-list strong,
+.review-choice-list small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.review-choice-list small {
+  color: var(--muted);
+}
+
+.decision-chip {
+  justify-self: end;
+  min-width: 92px;
+  padding: 4px 8px;
+  font-size: 0.78rem;
+  font-style: normal;
+  font-weight: 800;
+  text-align: center;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+}
+
+.decision-chip.linked {
+  color: var(--success);
+}
+
+.decision-chip.skipped {
+  color: var(--danger);
+}
+
+.decision-chip.pending {
+  color: var(--warn);
+}
+
 .two-columns {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -2229,9 +2389,11 @@ button:disabled {
   align-items: end;
 }
 
-.overwrite-confirm {
+.destructive-note {
   grid-column: 1 / -1;
-  padding: 10px 12px;
+  margin: 0;
+  padding: 12px 14px;
+  color: var(--danger);
   background: var(--surface);
   border: 1px solid color-mix(in srgb, var(--danger) 28%, var(--line));
   border-radius: 8px;
@@ -2299,7 +2461,7 @@ button:disabled {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 12px;
   margin-top: 18px;
   padding-top: 18px;
@@ -2462,10 +2624,12 @@ button:disabled {
   }
 
   .review-header,
+  .review-progress-panel,
   .review-position dl,
   .primary-decisions,
   .bulk-action-card,
   .bulk-action-buttons,
+  .review-choice-list a,
   .document-source-grid,
   .scan-actions,
   .two-columns,

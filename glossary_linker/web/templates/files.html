@@ -19,7 +19,7 @@
       <p>Scegli i documenti che dovranno contenere i link al glossario.</p>
     </div>
     <div class="page-actions">
-      <a class="button-link" href="{{ url_for('project_step') }}">Indietro</a>
+      <a class="button-link button-back" href="{{ url_for('project_step', job_id=job.id) }}">Indietro</a>
     </div>
   </div>
 
@@ -76,7 +76,7 @@
     </section>
 
     <div class="flow-actions flow-actions-between">
-      <a class="button-link" href="{{ url_for('project_step') }}">Indietro</a>
+      <a class="button-link button-back" href="{{ url_for('project_step', job_id=job.id) }}">Indietro</a>
       <button class="primary" type="submit">Avanti</button>
     </div>
   </form>

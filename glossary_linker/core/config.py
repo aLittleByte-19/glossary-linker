@@ -84,7 +84,10 @@ class LocalConfig:
 def _load_yaml(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
-    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError as exc:
+        raise ValueError(f"Configuration file {path} is not valid YAML: {exc}") from exc
     if not isinstance(data, dict):
         raise ValueError(f"Configuration file {path} must contain a mapping.")
     return data
@@ -105,8 +108,16 @@ def load_local_config(path: Path) -> LocalConfig:
 
 
 def save_editorial_config(config: EditorialConfig, path: Path) -> None:
-    path.write_text(yaml.safe_dump(asdict(config), sort_keys=False, allow_unicode=True), encoding="utf-8")
+    _atomic_write_yaml(asdict(config), path)
 
 
 def save_local_config(config: LocalConfig, path: Path) -> None:
-    path.write_text(yaml.safe_dump(asdict(config), sort_keys=False, allow_unicode=True), encoding="utf-8")
+    _atomic_write_yaml(asdict(config), path)
+
+
+def _atomic_write_yaml(payload: dict[str, Any], path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = yaml.safe_dump(payload, sort_keys=False, allow_unicode=True)
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    tmp_path.write_text(text, encoding="utf-8")
+    tmp_path.replace(path)

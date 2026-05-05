@@ -27,7 +27,7 @@
         <p class="muted">Le operazioni sono indipendenti e arrivano a un punto di conferma. I sorgenti vengono sovrascritti solo se lo scegli esplicitamente alla fine.</p>
       </div>
     </div>
-    <form method="post" class="operation-grid">
+    <form method="post" action="{{ url_for('project_step') }}" class="operation-grid">
       <label class="operation-card">
         <input type="radio" name="operation" value="link-documents" {% if selected_operation == "link-documents" %}checked{% endif %}>
         <span>

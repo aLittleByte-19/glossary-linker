@@ -65,6 +65,9 @@ def test_environment(config: LocalConfig) -> dict[str, str]:
 def compile_tex(tex_path: Path, config: LocalConfig, pdf_name: str | None = None) -> CompileResult:
     compiler = config.preferred_compiler
     command = _command_for(tex_path, compiler, config)
+    safe_pdf_name = _safe_pdf_name(pdf_name)
+    if pdf_name and safe_pdf_name is None:
+        return CompileResult(False, command, "Nome PDF non valido: usa solo un nome file, senza cartelle o path assoluti.")
     output_parts: list[str] = []
     try:
         if compiler == "latexmk" and config.clean_aux_files:
@@ -104,8 +107,8 @@ def compile_tex(tex_path: Path, config: LocalConfig, pdf_name: str | None = None
         return CompileResult(False, command, "Compilazione non avviata.")
 
     pdf_path = tex_path.with_suffix(".pdf")
-    if pdf_name:
-        target = tex_path.parent / pdf_name
+    if safe_pdf_name:
+        target = tex_path.parent / safe_pdf_name
         if completed.returncode == 0 and pdf_path.exists() and target != pdf_path:
             pdf_path.replace(target)
             pdf_path = target
@@ -163,3 +166,15 @@ def _resolve_tool(path: str) -> str | None:
     if candidate.exists():
         return str(candidate)
     return shutil.which(path)
+
+
+def _safe_pdf_name(value: str | None) -> str | None:
+    raw = (value or "").strip()
+    if not raw:
+        return None
+    candidate = Path(raw)
+    if candidate.is_absolute() or candidate.name != raw or candidate.name in {"", ".", ".."}:
+        return None
+    if candidate.suffix and candidate.suffix.lower() != ".pdf":
+        return None
+    return candidate.name if candidate.suffix else candidate.name + ".pdf"

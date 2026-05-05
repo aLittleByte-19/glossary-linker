@@ -76,17 +76,31 @@ def merge_config(entries: list[GlossaryEntry], config: EditorialConfig) -> list[
 def load_entries_store(path: Path) -> list[GlossaryEntry]:
     if not path.exists():
         return []
-    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError as exc:
+        raise ValueError(f"Entries store {path} is not valid YAML: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ValueError(f"Entries store {path} must contain a mapping.")
     raw_entries = data.get("entries", [])
+    if raw_entries is None:
+        raw_entries = []
+    if not isinstance(raw_entries, list):
+        raise ValueError(f"Entries store {path} field 'entries' must be a list.")
     entries: list[GlossaryEntry] = []
     for item in raw_entries:
         if not isinstance(item, dict) or not item.get("id") or not item.get("term"):
             continue
+        aliases = item.get("aliases") or []
+        if isinstance(aliases, str):
+            aliases = [part.strip() for part in aliases.split(",") if part.strip()]
+        elif not isinstance(aliases, list):
+            aliases = []
         entries.append(GlossaryEntry(
             id=str(item["id"]),
             term=str(item["term"]),
             definition=str(item.get("definition", "")),
-            aliases=list(item.get("aliases") or []),
+            aliases=[str(alias) for alias in aliases],
             mode="manual" if item.get("mode") == "manual" else "automatic",
         ))
     return entries
@@ -106,7 +120,10 @@ def save_entries_store(entries: list[GlossaryEntry], path: Path) -> None:
     payload: dict[str, Any] = {
         "entries": [asdict(entry) for entry in sorted(cleaned, key=lambda item: item.term.casefold())]
     }
-    path.write_text(yaml.safe_dump(payload, sort_keys=False, allow_unicode=True), encoding="utf-8")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    tmp_path.write_text(yaml.safe_dump(payload, sort_keys=False, allow_unicode=True), encoding="utf-8")
+    tmp_path.replace(path)
 
 
 def merge_detected_with_store(detected: list[GlossaryEntry], stored: list[GlossaryEntry]) -> tuple[list[GlossaryEntry], int]:

@@ -13,14 +13,35 @@
 <section class="panel review-panel">
   <form method="post" class="review-layout" data-review-form data-review-api="{{ url_for('api_decision', job_id=job_id) }}">
     <header class="review-header">
-      <a class="button-link nav-button" href="{{ previous_step_url }}">Indietro</a>
+      <button name="action" value="prev" type="submit" class="nav-button" {% if index == 0 %}disabled{% endif %}>Indietro</button>
       <div>
         <p class="eyebrow">Revisione manuale</p>
         <h1>Occorrenza {{ index + 1 }} di {{ total }}</h1>
         <p class="muted">Termine {{ term_index }} di {{ term_total }} · Occorrenza {{ same_term_index }} di {{ same_term_total }} per il termine corrente</p>
       </div>
-      <button name="action" value="next" type="submit" class="nav-button" {% if index + 1 == total %}disabled{% endif %}>Avanti</button>
+      <button name="action" value="next" type="submit" class="nav-button nav-button-forward" {% if index + 1 == total %}disabled{% endif %}>Avanti</button>
     </header>
+
+    <div class="review-command-bar">
+      <a class="button-link button-back" href="{{ previous_step_url }}">Torna al glossario</a>
+      <button name="action" value="next_pending" type="submit" {% if pending_count == 0 %}disabled{% endif %}>Prossima da decidere</button>
+      <button class="primary" name="action" value="finish" type="submit">Vai al report</button>
+    </div>
+
+    <section class="review-progress-panel" aria-label="Stato revisione">
+      <div>
+        <strong>{{ decided_count }}</strong>
+        <span>scelte salvate</span>
+      </div>
+      <div>
+        <strong>{{ pending_count }}</strong>
+        <span>da decidere</span>
+      </div>
+      <div>
+        <strong>{{ total }}</strong>
+        <span>occorrenze totali</span>
+      </div>
+    </section>
 
     <section class="review-term">
       <h2>Definizione dal glossario</h2>
@@ -52,7 +73,7 @@
     <section class="decision-panel">
       <div>
         <h2>Azioni estese</h2>
-        <p class="muted">Usale quando la stessa decisione vale per piu occorrenze. Puoi ancora tornare indietro e cambiare le scelte prima del report.</p>
+        <p class="muted">Usale quando la stessa decisione vale per piu occorrenze. Resti nella revisione e puoi cambiare le scelte prima del report.</p>
       </div>
 
       <div class="bulk-actions">
@@ -78,12 +99,11 @@
         </section>
         <section class="bulk-action-card">
           <div>
-            <h3>File e report</h3>
-            <p>Scarta il file corrente o chiudi la revisione.</p>
+            <h3>Nel file corrente</h3>
+            <p>Marca come saltate tutte le occorrenze del documento aperto.</p>
           </div>
-          <div class="bulk-action-buttons">
+          <div class="bulk-action-buttons single-action">
             <button class="danger-action" name="action" value="skip_file" type="submit">Salta file</button>
-            <button name="action" value="finish" type="submit">Vai al report</button>
           </div>
         </section>
       </div>
@@ -99,6 +119,27 @@
           <button class="success-primary" name="action" value="link" type="submit" data-ajax-decision>Collega</button>
         </div>
       </div>
+    </section>
+
+    <section class="review-summary-panel">
+      <div class="section-head">
+        <div>
+          <h2>Scelte della revisione</h2>
+          <p class="muted">Riapri qualunque occorrenza per controllare o modificare la decisione.</p>
+        </div>
+      </div>
+      <ol class="review-choice-list">
+        {% for item in summary_items %}
+          <li class="{% if item.current %}current{% endif %}">
+            <a href="{{ url_for('review', job_id=job_id, index=item['index']) }}" {% if item.current %}aria-current="true"{% endif %}>
+              <span>{{ item["index"] + 1 }}</span>
+              <strong>{{ item.term }}</strong>
+              <small>{{ item.file }}:{{ item.line }}</small>
+              <em class="decision-chip {{ item.decision_class }}">{{ item.decision }}</em>
+            </a>
+          </li>
+        {% endfor %}
+      </ol>
     </section>
   </form>
 </section>

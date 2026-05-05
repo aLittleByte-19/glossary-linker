@@ -7,8 +7,10 @@
       <p>Consulta le voci salvate in <code>{{ entries_path.name }}</code>, correggi alias e scegli quali termini richiedono revisione manuale.</p>
     </div>
     <div class="page-actions">
-      <a class="button-link" href="{{ url_for('project_step') }}">Home</a>
-      <a class="button-link" href="{{ url_for('rules_step') }}">Torna al wizard</a>
+      {% if wizard_return_url %}
+        <a class="button-link button-back" href="{{ wizard_return_url }}">Torna al wizard</a>
+      {% endif %}
+      <a class="button-link button-home" href="{{ url_for('project_step') }}">Home</a>
     </div>
   </div>
 
@@ -28,6 +30,12 @@
   </div>
 
   <form method="post" class="stack" data-entries-form>
+    {% if job_id %}
+      <input type="hidden" name="job_id" value="{{ job_id }}">
+    {% endif %}
+    {% if return_to %}
+      <input type="hidden" name="return_to" value="{{ return_to }}">
+    {% endif %}
     <div class="entries-toolbar">
       <div class="stats compact-stats">
         <div><strong>{{ entries | length }}</strong><span>Termini</span></div>
@@ -98,7 +106,11 @@
     </section>
 
     <div class="actions">
-      <a class="button-link" href="{{ url_for('rules_step') }}">Indietro</a>
+      {% if wizard_return_url %}
+        <a class="button-link button-back" href="{{ wizard_return_url }}">Indietro</a>
+      {% else %}
+        <a class="button-link button-home" href="{{ url_for('project_step') }}">Home</a>
+      {% endif %}
       <button class="primary" type="submit">Salva glossario rilevato</button>
     </div>
   </form>

@@ -76,6 +76,7 @@ async function refreshGlossaryEntries({ forced = false } = {}) {
 
   const payload = collectOptionalPayload([
     ["repo_root", "#repo_root"],
+    ["job_id", "input[name='job_id']"],
     ["glossary_path", "#glossary_path"],
     ["glossary_html_url", "#glossary_html_url"],
     ["glossary_html_path", "[name='glossary_html_path']"],
@@ -96,6 +97,7 @@ async function refreshGlossaryEntries({ forced = false } = {}) {
     if (!data.ok) throw new Error(data.error || "Impossibile leggere il glossario.");
     if (Array.isArray(data.entries)) {
       renderEntries(data.entries, collectEntryState());
+      renderGlossaryPreviewEntries(data.entries);
     }
     if (status) {
       const stats = data.stats || {};
@@ -353,6 +355,34 @@ function renderEntries(entries, previousState = new Map()) {
   sortWizardEntryTables();
   updateWizardEntryPagination("automatic");
   updateWizardEntryPagination("manual");
+}
+
+function renderGlossaryPreviewEntries(entries) {
+  const list = document.querySelector("#glossary_entries_preview");
+  if (!list) return;
+  list.innerHTML = "";
+  if (!entries.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty-state";
+    empty.textContent = "Nessuna voce rilevata.";
+    list.appendChild(empty);
+    return;
+  }
+  entries.forEach((entry) => {
+    const item = document.createElement("div");
+    item.className = "entry-row-preview";
+    const hidden = document.createElement("input");
+    hidden.type = "hidden";
+    hidden.name = "entry_id";
+    hidden.value = entry.id;
+    const term = document.createElement("strong");
+    term.textContent = entry.term;
+    const badge = document.createElement("span");
+    badge.className = `badge ${entry.mode}`;
+    badge.textContent = entry.mode;
+    item.append(hidden, term, badge);
+    list.appendChild(item);
+  });
 }
 
 function appendEmptyReviewRow(tbody, message) {
