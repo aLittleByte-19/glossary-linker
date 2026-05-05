@@ -20,7 +20,7 @@ Su Windows PowerShell:
 powershell -ExecutionPolicy Bypass -File scripts\install.ps1
 ```
 
-Per installare anche gli strumenti di test usa `--dev` su macOS/Linux o `-Dev` su PowerShell. Gli script creano la virtualenv, installano il pacchetto in modo editabile e preparano i file locali necessari se mancano.
+Per installare anche gli strumenti di test usa `--dev` su macOS/Linux o `-Dev` su PowerShell. Gli script creano la virtualenv e installano il pacchetto in modo editabile.
 
 ## Avvio
 
