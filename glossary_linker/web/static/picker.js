@@ -74,12 +74,16 @@ async function refreshGlossaryEntries({ forced = false } = {}) {
   const status = document.querySelector("#glossary_preview_status");
   if (status) status.textContent = forced ? "Aggiornamento voci in corso..." : "Rilettura glossario...";
 
-  const payload = {
-    repo_root: document.querySelector("#repo_root")?.value || "",
-    glossary_path: document.querySelector("#glossary_path")?.value || "",
-    glossary_pdf_url: document.querySelector("#glossary_pdf_url")?.value || "",
-    anchor_format: document.querySelector("#anchor_format")?.value || ""
-  };
+  const payload = collectOptionalPayload([
+    ["repo_root", "#repo_root"],
+    ["job_id", "input[name='job_id']"],
+    ["glossary_path", "#glossary_path"],
+    ["glossary_html_url", "#glossary_html_url"],
+    ["glossary_html_path", "[name='glossary_html_path']"],
+    ["html_anchor_format", "#html_anchor_format"],
+    ["glossary_custom_command", "[name='glossary_custom_command']"],
+    ["glossary_structure_description", "[name='glossary_structure_description']"]
+  ]);
   const detection = document.querySelector('input[name="glossary_detection"]:checked');
   if (detection) payload.glossary_detection = detection.value;
 
@@ -91,6 +95,10 @@ async function refreshGlossaryEntries({ forced = false } = {}) {
     });
     const data = await response.json();
     if (!data.ok) throw new Error(data.error || "Impossibile leggere il glossario.");
+    if (Array.isArray(data.entries)) {
+      renderEntries(data.entries, collectEntryState());
+      renderGlossaryPreviewEntries(data.entries);
+    }
     if (status) {
       const stats = data.stats || {};
       status.textContent = `${stats.total || 0} termini rilevati, ${stats.manual || 0} in revisione manuale, ${stats.new || 0} nuovi termini. Apri il glossario per confermare la lista.`;
@@ -143,18 +151,23 @@ async function discoverTexFiles(button) {
 async function saveWizardState() {
   const form = document.querySelector("[data-wizard-form]");
   if (!form) return;
-  const payload = {
-    operation: document.querySelector('input[name="operation"]:checked')?.value || "",
-    repo_root: document.querySelector("#repo_root")?.value || "",
-    glossary_path: document.querySelector("#glossary_path")?.value || "",
-    glossary_pdf_url: document.querySelector("#glossary_pdf_url")?.value || "",
-    anchor_format: document.querySelector("#anchor_format")?.value || "",
-    source_dir: document.querySelector("#source_dir")?.value || ".",
-    review_order: form.querySelector('input[name="review_order"]:checked')?.value || "by_term",
-    new_entry_ids: form.querySelector('input[name="new_entry_ids"]')?.value || ""
-  };
+  const payload = collectOptionalPayload([
+    ["repo_root", "#repo_root"],
+    ["glossary_path", "#glossary_path"],
+    ["glossary_html_url", "#glossary_html_url"],
+    ["glossary_html_path", "[name='glossary_html_path']"],
+    ["html_anchor_format", "#html_anchor_format"],
+    ["glossary_custom_command", "[name='glossary_custom_command']"],
+    ["glossary_structure_description", "[name='glossary_structure_description']"],
+    ["source_dir", "#source_dir"],
+    ["new_entry_ids", "input[name='new_entry_ids']"]
+  ]);
+  const operation = document.querySelector('input[name="operation"]:checked');
+  if (operation) payload.operation = operation.value;
   const detection = document.querySelector('input[name="glossary_detection"]:checked');
   if (detection) payload.glossary_detection = detection.value;
+  const reviewOrder = form.querySelector('input[name="review_order"]:checked');
+  if (reviewOrder) payload.review_order = reviewOrder.value;
   if (form.querySelector("[data-rule-editor]")) {
     payload.exclude_file_patterns = document.querySelector("#exclude_file_patterns")?.value || "";
     payload.ignored_environments = document.querySelector("#ignored_environments")?.value || "";
@@ -162,6 +175,8 @@ async function saveWizardState() {
     payload.ignored_sections = [...form.querySelectorAll('input[name="ignored_sections"]:checked')].map((item) => item.value);
     payload.skip_titles = Boolean(form.querySelector('input[name="skip_titles"]')?.checked);
   }
+  const texPaths = document.querySelector("#tex_paths");
+  if (texPaths) payload.tex_paths = texPaths.value || "";
   try {
     await fetch("/wizard-state", {
       method: "POST",
@@ -171,6 +186,16 @@ async function saveWizardState() {
   } catch {
     // Autosave is opportunistic; explicit submit still saves the same fields.
   }
+}
+
+function collectOptionalPayload(pairs) {
+  const payload = {};
+  pairs.forEach(([name, selector]) => {
+    const input = document.querySelector(selector);
+    if (!input) return;
+    payload[name] = input.value || "";
+  });
+  return payload;
 }
 
 function toRelativePath(path, root) {
@@ -228,13 +253,15 @@ function renderFileList(target, listSelector) {
 
 function collectEntryState() {
   const state = new Map();
-  document.querySelectorAll("#entries_tbody tr[data-entry]").forEach((row) => {
+  document.querySelectorAll("[data-entry-review-row]").forEach((row) => {
     const id = row.querySelector('input[name="entry_id"]')?.value;
     if (!id) return;
     const aliasInput = [...row.querySelectorAll("input")].find((input) => input.name === `aliases_${id}`);
+    const definitionInput = [...row.querySelectorAll("textarea")].find((input) => input.name === `definition_${id}`);
     const modeInput = [...row.querySelectorAll("input")].find((input) => input.name === `mode_${id}`);
     state.set(id, {
       aliases: aliasInput?.value || "",
+      definition: definitionInput?.value || "",
       manual: Boolean(modeInput?.checked)
     });
   });
@@ -242,42 +269,56 @@ function collectEntryState() {
 }
 
 function renderEntries(entries, previousState = new Map()) {
-  const tbody = document.querySelector("#entries_tbody");
-  if (!tbody) return;
-  tbody.innerHTML = "";
+  const manualBody = document.querySelector('[data-wizard-entry-table="manual"]');
+  const autoBody = document.querySelector('[data-wizard-entry-table="automatic"]');
+  if (!manualBody || !autoBody) return;
+  manualBody.innerHTML = "";
+  autoBody.innerHTML = "";
   if (!entries.length) {
-    const row = document.createElement("tr");
-    const cell = document.createElement("td");
-    cell.colSpan = 5;
-    cell.textContent = "Nessuna voce rilevata. Verifica il path del glossario o usa Aggiorna voci.";
-    row.appendChild(cell);
-    tbody.appendChild(row);
+    appendEmptyReviewRow(autoBody, "Nessuna voce rilevata. Verifica il path del glossario o usa Aggiorna dal .tex.");
+    appendEmptyReviewRow(manualBody, "Nessuna voce rilevata.");
+    updateWizardEntryPagination("automatic");
+    updateWizardEntryPagination("manual");
     return;
   }
   entries.forEach((entry) => {
     const state = previousState.get(entry.id);
     const aliases = state ? state.aliases : (entry.aliases || []).join(", ");
+    const definition = state ? state.definition : entry.definition || "";
     const manual = state ? state.manual : entry.mode === "manual";
+    const tbody = manual ? manualBody : autoBody;
     const row = document.createElement("tr");
     row.dataset.entry = "";
+    row.dataset.entryReviewRow = "";
+    row.dataset.entryId = entry.id;
+    row.dataset.entryTerm = (entry.term || "").toLowerCase();
+    row.dataset.entryMode = manual ? "manual" : "automatic";
 
-    const idCell = document.createElement("td");
+    const termCell = document.createElement("td");
+    const termStrong = document.createElement("strong");
+    termStrong.textContent = entry.term;
     const code = document.createElement("code");
     code.textContent = entry.id;
     const hidden = document.createElement("input");
     hidden.type = "hidden";
     hidden.name = "entry_id";
     hidden.value = entry.id;
+    const termHidden = document.createElement("input");
+    termHidden.type = "hidden";
+    termHidden.name = `term_${entry.id}`;
+    termHidden.value = entry.term;
     const idContent = document.createElement("div");
     idContent.className = "entry-term-cell";
-    idContent.append(code, hidden);
-    idCell.appendChild(idContent);
-
-    const termCell = document.createElement("td");
-    termCell.textContent = entry.term;
+    idContent.append(termStrong, code, hidden, termHidden);
+    termCell.appendChild(idContent);
 
     const definitionCell = document.createElement("td");
-    definitionCell.textContent = entry.definition || "";
+    const definitionInput = document.createElement("textarea");
+    definitionInput.className = "definition-input";
+    definitionInput.name = `definition_${entry.id}`;
+    definitionInput.rows = 2;
+    definitionInput.value = definition;
+    definitionCell.appendChild(definitionInput);
 
     const aliasCell = document.createElement("td");
     const aliasInput = document.createElement("input");
@@ -291,7 +332,7 @@ function renderEntries(entries, previousState = new Map()) {
     const modeCell = document.createElement("td");
     modeCell.className = "mode-cell";
     const label = document.createElement("label");
-    label.className = "switch icon-only";
+    label.className = "switch labeled-switch";
     label.title = `Modalità per ${entry.term}`;
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
@@ -302,15 +343,56 @@ function renderEntries(entries, previousState = new Map()) {
     checkbox.setAttribute("aria-label", `Modalità per ${entry.term}`);
     const visual = document.createElement("span");
     const text = document.createElement("em");
-    text.className = "sr-only";
     text.dataset.modeLabel = "";
     label.append(checkbox, visual, text);
     modeCell.appendChild(label);
 
-    row.append(idCell, termCell, definitionCell, aliasCell, modeCell);
+    row.append(termCell, definitionCell, aliasCell, modeCell);
     tbody.appendChild(row);
     updateModeLabel(checkbox);
   });
+  ensureReviewEmptyRows();
+  sortWizardEntryTables();
+  updateWizardEntryPagination("automatic");
+  updateWizardEntryPagination("manual");
+}
+
+function renderGlossaryPreviewEntries(entries) {
+  const list = document.querySelector("#glossary_entries_preview");
+  if (!list) return;
+  list.innerHTML = "";
+  if (!entries.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty-state";
+    empty.textContent = "Nessuna voce rilevata.";
+    list.appendChild(empty);
+    return;
+  }
+  entries.forEach((entry) => {
+    const item = document.createElement("div");
+    item.className = "entry-row-preview";
+    const hidden = document.createElement("input");
+    hidden.type = "hidden";
+    hidden.name = "entry_id";
+    hidden.value = entry.id;
+    const term = document.createElement("strong");
+    term.textContent = entry.term;
+    const badge = document.createElement("span");
+    badge.className = `badge ${entry.mode}`;
+    badge.textContent = entry.mode;
+    item.append(hidden, term, badge);
+    list.appendChild(item);
+  });
+}
+
+function appendEmptyReviewRow(tbody, message) {
+  const row = document.createElement("tr");
+  row.dataset.emptyRow = "";
+  const cell = document.createElement("td");
+  cell.colSpan = 4;
+  cell.textContent = message;
+  row.appendChild(cell);
+  tbody.appendChild(row);
 }
 
 function updateModeLabel(input) {
@@ -322,6 +404,11 @@ function updateModeLabel(input) {
 }
 
 const entryTables = {
+  manual: { page: 0, query: "" },
+  automatic: { page: 0, query: "" }
+};
+
+const wizardEntryTables = {
   manual: { page: 0, query: "" },
   automatic: { page: 0, query: "" }
 };
@@ -344,6 +431,94 @@ function initFormatEntries() {
   sortFormatEntries();
   updateFormatEntryCounts();
   updateFormatPagination();
+}
+
+function initWizardSteps() {
+  const form = document.querySelector("[data-wizard-steps]");
+  if (!form) return;
+  showWizardPanel("glossary");
+}
+
+function showWizardPanel(name) {
+  document.querySelectorAll("[data-wizard-panel]").forEach((panel) => {
+    panel.hidden = panel.dataset.wizardPanel !== name;
+  });
+  const actions = document.querySelector("[data-wizard-operation-actions]");
+  if (actions) actions.hidden = name !== "operation";
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function initWizardEntryTables() {
+  if (!document.querySelector("[data-wizard-entry-table]")) return;
+  ensureReviewEmptyRows();
+  sortWizardEntryTables();
+  updateWizardEntryPagination("automatic");
+  updateWizardEntryPagination("manual");
+}
+
+function sortWizardEntryTables() {
+  ["manual", "automatic"].forEach((kind) => {
+    const table = document.querySelector(`[data-wizard-entry-table="${kind}"]`);
+    if (!table) return;
+    [...table.querySelectorAll("[data-entry-review-row]")]
+      .sort((a, b) => (a.dataset.entryTerm || "").localeCompare(b.dataset.entryTerm || "", "it"))
+      .forEach((row) => table.appendChild(row));
+  });
+}
+
+function ensureReviewEmptyRows() {
+  ["manual", "automatic"].forEach((kind) => {
+    const table = document.querySelector(`[data-wizard-entry-table="${kind}"]`);
+    if (!table) return;
+    table.querySelectorAll("[data-empty-row]").forEach((row) => row.remove());
+    if (!table.querySelector("[data-entry-review-row]")) {
+      appendEmptyReviewRow(table, "Nessuna voce in questa revisione.");
+    }
+  });
+}
+
+function updateWizardEntryPagination(kind) {
+  const table = document.querySelector(`[data-wizard-entry-table="${kind}"]`);
+  if (!table) return;
+  table.querySelectorAll("[data-empty-row]").forEach((row) => row.hidden = false);
+  const rows = [...table.querySelectorAll("[data-entry-review-row]")];
+  const state = wizardEntryTables[kind];
+  const query = state.query.trim().toLowerCase();
+  const filtered = rows.filter((row) => row.textContent.toLowerCase().includes(query));
+  const pageSize = 10;
+  const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  state.page = Math.min(state.page, pages - 1);
+  const start = state.page * pageSize;
+  const visible = new Set(filtered.slice(start, start + pageSize));
+  rows.forEach((row) => {
+    row.hidden = !visible.has(row);
+  });
+  const empty = table.querySelector("[data-empty-row]");
+  if (empty) empty.hidden = filtered.length !== 0;
+  const label = document.querySelector(`[data-wizard-entry-page-label="${kind}"]`);
+  const prev = document.querySelector(`[data-wizard-entry-prev="${kind}"]`);
+  const next = document.querySelector(`[data-wizard-entry-next="${kind}"]`);
+  if (label) label.textContent = `${state.page + 1} / ${pages} (${filtered.length})`;
+  if (prev) prev.disabled = state.page === 0;
+  if (next) next.disabled = state.page >= pages - 1;
+}
+
+function moveWizardEntryRow(input) {
+  const row = input.closest("[data-entry-review-row]");
+  if (!row) return;
+  const targetKind = input.checked ? "manual" : "automatic";
+  const sourceKind = input.checked ? "automatic" : "manual";
+  const targetTable = document.querySelector(`[data-wizard-entry-table="${targetKind}"]`);
+  if (!targetTable) return;
+  row.dataset.entryMode = targetKind;
+  targetTable.appendChild(row);
+  updateModeLabel(input);
+  ensureReviewEmptyRows();
+  sortWizardEntryTables();
+  wizardEntryTables[sourceKind].page = 0;
+  wizardEntryTables[targetKind].page = 0;
+  updateWizardEntryPagination("manual");
+  updateWizardEntryPagination("automatic");
 }
 
 function sortEntryTables() {
@@ -464,7 +639,7 @@ function initSettingsSearch() {
   if (!search || !sidebar) return;
   search.addEventListener("input", () => {
     const query = search.value.trim().toLowerCase();
-    sidebar.querySelectorAll(".settings-nav-group").forEach((group) => {
+    sidebar.querySelectorAll(".settings-nav-section").forEach((group) => {
       let visibleLinks = 0;
       group.querySelectorAll("a").forEach((link) => {
         const isVisible = !query || link.textContent.toLowerCase().includes(query);
@@ -473,6 +648,78 @@ function initSettingsSearch() {
       });
       group.hidden = visibleLinks === 0;
     });
+  });
+}
+
+function initScrollSpy() {
+  document.querySelectorAll("[data-scrollspy]").forEach((nav) => {
+    const links = [...nav.querySelectorAll("[data-scroll-link]")];
+    const targets = links
+      .map((link) => {
+        const hash = decodeURIComponent(link.hash || "");
+        const target = hash ? document.getElementById(hash.slice(1)) : null;
+        return target ? { link, target } : null;
+      })
+      .filter(Boolean);
+    if (!targets.length) return;
+
+    const getOffset = () => {
+      const explicit = Number(nav.dataset.scrollOffset || 0);
+      if (explicit > 0) return explicit;
+      const cssOffset = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--anchor-offset"));
+      if (cssOffset > 0) return cssOffset;
+      const topbar = document.querySelector(".topbar");
+      return (topbar?.getBoundingClientRect().height || 96) + 48;
+    };
+    const setActive = (activeLink) => {
+      links.forEach((link) => {
+        const isActive = link === activeLink;
+        link.classList.toggle("active", isActive);
+        link.toggleAttribute("aria-current", isActive);
+      });
+      nav.querySelectorAll(".active-section").forEach((item) => item.classList.remove("active-section"));
+      const section = activeLink.closest(".settings-nav-section, .level-2");
+      if (section) section.classList.add("active-section");
+    };
+
+    const update = () => {
+      const bottom = window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2;
+      let active = targets[0];
+      if (bottom) {
+        active = targets[targets.length - 1];
+      } else {
+        const marker = getOffset() + 8;
+        for (const item of targets) {
+          if (item.target.getBoundingClientRect().top <= marker) active = item;
+        }
+      }
+      setActive(active.link);
+    };
+
+    links.forEach((link) => {
+      link.addEventListener("click", (event) => {
+        const target = targets.find((item) => item.link === link)?.target;
+        if (!target) return;
+        event.preventDefault();
+        const top = window.scrollY + target.getBoundingClientRect().top - getOffset();
+        window.history.pushState(null, "", link.hash);
+        window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+        window.setTimeout(update, 140);
+      });
+    });
+    window.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    if (window.location.hash) {
+      const initial = targets.find((item) => item.link.hash === window.location.hash);
+      if (initial) {
+        window.setTimeout(() => {
+          const top = window.scrollY + initial.target.getBoundingClientRect().top - getOffset();
+          window.scrollTo({ top: Math.max(0, top) });
+          update();
+        }, 0);
+      }
+    }
+    update();
   });
 }
 
@@ -579,6 +826,55 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;");
 }
 
+function initReviewDecisionAjax() {
+  const form = document.querySelector("[data-review-form]");
+  const grid = form?.querySelector(".primary-decisions");
+  const status = form?.querySelector("[data-review-status]");
+  const occurrenceId = grid?.dataset.occurrenceId;
+  const currentIndex = Number.parseInt(grid?.dataset.currentIndex || "", 10);
+  const apiUrl = form?.dataset.reviewApi;
+  if (!form || !grid || !occurrenceId || !apiUrl) return;
+
+  const buttons = [...form.querySelectorAll("[data-ajax-decision]")];
+  buttons.forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.preventDefault();
+      const value = button.value;
+      buttons.forEach((item) => item.disabled = true);
+      button.classList.add("loading");
+      if (status) status.textContent = "Salvataggio...";
+
+      try {
+        const response = await fetch(apiUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            occurrence_id: occurrenceId,
+            occurrence_index: Number.isFinite(currentIndex) ? currentIndex : null,
+            value
+          })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.ok) {
+          throw new Error(data.error || "Errore durante il salvataggio.");
+        }
+        button.classList.remove("loading");
+        button.classList.add("saved");
+        button.textContent = "Salvato!";
+        if (status) status.textContent = data.message || "Salvato!";
+        window.setTimeout(() => {
+          window.location.assign(data.redirect_url || form.action);
+        }, 260);
+      } catch (error) {
+        button.classList.remove("loading");
+        buttons.forEach((item) => item.disabled = false);
+        if (status) status.textContent = "Salvataggio non riuscito.";
+        showAppAlert(error.message, "error");
+      }
+    });
+  });
+}
+
 document.addEventListener("click", (event) => {
   const button = event.target.closest("[data-picker]");
   if (button) {
@@ -624,16 +920,26 @@ document.addEventListener("click", (event) => {
     const dialog = document.getElementById(modalButton.dataset.openModal);
     if (dialog && typeof dialog.showModal === "function") dialog.showModal();
   }
+
+  const wizardNext = event.target.closest("[data-wizard-next]");
+  if (wizardNext) showWizardPanel("operation");
+
+  const wizardBack = event.target.closest("[data-wizard-back]");
+  if (wizardBack) showWizardPanel("glossary");
 });
 
 document.addEventListener("DOMContentLoaded", () => {
   initRuleEditors();
   initSettingsSearch();
+  initScrollSpy();
+  initReviewDecisionAjax();
   document.querySelectorAll("[data-file-list]").forEach((button) => {
     const target = document.querySelector(button.dataset.target);
     if (target) renderFileList(target, button.dataset.fileList);
   });
   document.querySelectorAll("[data-mode-switch]").forEach(updateModeLabel);
+  initWizardSteps();
+  initWizardEntryTables();
   initEntryTables();
   initFormatEntries();
   const debouncedRefresh = debounce(() => refreshGlossaryEntries());
@@ -653,6 +959,8 @@ document.addEventListener("change", (event) => {
   if (modeSwitch) {
     if (document.querySelector("[data-entries-form]")) {
       moveEntryRow(modeSwitch);
+    } else if (modeSwitch.closest("[data-entry-review-row]")) {
+      moveWizardEntryRow(modeSwitch);
     } else {
       updateModeLabel(modeSwitch);
     }
@@ -671,6 +979,15 @@ document.addEventListener("input", (event) => {
     formatEntries.query = formatSearch.value || "";
     formatEntries.page = 0;
     updateFormatPagination();
+    return;
+  }
+
+  const wizardSearch = event.target.closest("[data-wizard-entry-search]");
+  if (wizardSearch) {
+    const kind = wizardSearch.dataset.wizardEntrySearch;
+    wizardEntryTables[kind].query = wizardSearch.value || "";
+    wizardEntryTables[kind].page = 0;
+    updateWizardEntryPagination(kind);
     return;
   }
 
@@ -705,5 +1022,18 @@ document.addEventListener("click", (event) => {
     const kind = next.dataset.pageNext;
     entryTables[kind].page += 1;
     updateEntryPagination(kind);
+  }
+
+  const wizardPrev = event.target.closest("[data-wizard-entry-prev]");
+  if (wizardPrev) {
+    const kind = wizardPrev.dataset.wizardEntryPrev;
+    wizardEntryTables[kind].page = Math.max(0, wizardEntryTables[kind].page - 1);
+    updateWizardEntryPagination(kind);
+  }
+  const wizardNext = event.target.closest("[data-wizard-entry-next]");
+  if (wizardNext) {
+    const kind = wizardNext.dataset.wizardEntryNext;
+    wizardEntryTables[kind].page += 1;
+    updateWizardEntryPagination(kind);
   }
 });

@@ -1,150 +1,78 @@
 {% extends "base.html" %}
+
 {% block progress %}
 <nav class="workflow-progress" aria-label="Avanzamento">
-  <a href="{{ url_for('operation') }}">Operazione</a>
-  <a class="active" href="{{ url_for('glossary_rules') }}">Regole</a>
+  <a href="{{ url_for('project_step', job_id=job.id) }}">Operazione</a>
+  <a href="{{ url_for('files_step', job_id=job.id) }}">Documenti</a>
+  <a href="{{ url_for('rules_step', job_id=job.id) }}">Regole</a>
+  <a class="active" aria-current="step" href="{{ url_for('glossary_step', job_id=job.id) }}">Glossario</a>
   <span class="disabled">Revisione</span>
   <span class="disabled">Output</span>
 </nav>
 {% endblock %}
+
 {% block content %}
 <section class="panel">
   <div class="page-head">
     <div>
-      <h1>Glossario e Regole</h1>
-      <p>Configura le sorgenti, scegli i documenti e conferma il glossario rilevato prima di iniziare l'elaborazione.</p>
+      <h1>Glossario rilevato</h1>
+      <p>Conferma le impostazioni del glossario e le voci da linkare.</p>
     </div>
     <div class="page-actions">
-      <a class="button-link" href="{{ url_for('operation') }}">Indietro</a>
-      <a class="button-link" href="{{ url_for('settings', tab='rules') }}">Regole</a>
+      <a class="button-link button-back" href="{{ url_for('rules_step', job_id=job.id) }}">Indietro</a>
     </div>
   </div>
 
-  <div class="guidance-strip">
-    <div>
-      <strong>Flusso selezionato</strong>
-      <span>{% if operation == "link-documents" %}Linka documenti{% else %}Aggiorna per nuove voci glossario{% endif %}</span>
-    </div>
-    <div>
-      <strong>Salvataggio</strong>
-      <span>Nessun sorgente viene modificato prima della schermata Output.</span>
-    </div>
-    <div>
-      <strong>Modalità termini</strong>
-      <span>Automatico linka tutto, Manuale apre la revisione occorrenza per occorrenza.</span>
-    </div>
-  </div>
-
-  <form method="post" enctype="multipart/form-data" class="stack" data-wizard-form>
-    <div class="form-section path-stack guided-block">
-      <div>
-        <p class="section-kicker">Passo 1</p>
-        <h2>Sorgenti</h2>
-        <p class="muted">La root progetto serve per mostrare path relativi e per scansionare i documenti. Il glossario puo essere un path locale o un URL; l'URL del PDF è quello che finirà nei link.</p>
-      </div>
-      <label>Root progetto
-        <span class="field-with-action wide">
-          <input id="repo_root" name="repo_root" value="{{ local.default_repo_root }}" data-glossary-source data-persist>
-          <button type="button" data-picker data-kind="directory" data-target="#repo_root">Scegli</button>
-        </span>
-      </label>
-      <label>Path glossario .tex
-        <span class="field-with-action wide">
-          <input id="glossary_path" name="glossary_path" value="{{ config.glossary_path }}" data-glossary-source data-persist>
-          <button type="button" data-picker data-kind="file" data-target="#glossary_path">Scegli</button>
-        </span>
-      </label>
-      <label>URL finale Glossario.pdf
-        <input id="glossary_pdf_url" name="glossary_pdf_url" value="{{ config.glossary_pdf_url }}" data-glossary-source data-persist>
-      </label>
-      <label>Formato anchor
-        <input id="anchor_format" name="anchor_format" value="{{ config.anchor_format }}" data-glossary-source data-persist>
-      </label>
-    </div>
-
-    {% if operation == "link-documents" %}
-      <section class="input-group guided-block">
-        <div class="section-head">
-          <div>
-            <p class="section-kicker">Passo 2</p>
-            <h2>Documenti da linkare</h2>
-            <p class="muted">Seleziona singoli file oppure fai rilevare i <code>.tex</code>. I file dentro la root sono mostrati come path relativi; quelli fuori root restano assoluti.</p>
-          </div>
-        </div>
-        <div class="document-source-grid">
-          <section>
-            <h3>Selezione manuale</h3>
-            <p class="muted">Scegli uno o piu documenti specifici dal file system.</p>
-            <button type="button" data-picker data-kind="file" data-multiple="true" data-target="#tex_paths" data-root="#repo_root" data-file-list="#tex_file_list">Scegli file</button>
-          </section>
-          <section>
-            <h3>Scansione automatica</h3>
-            <p class="muted">Rileva tutti i <code>.tex</code> nella root progetto oppure in una cartella scelta, applicando subito le regole di esclusione.</p>
-            <label>Cartella da scansionare
-              <span class="field-with-action wide">
-                <input id="source_dir" name="source_dir" value="{{ local.last_source_dir }}" placeholder="." data-persist>
-                <button type="button" data-picker data-kind="directory" data-target="#source_dir">Scegli</button>
-              </span>
-            </label>
-            <div class="scan-actions">
-              <button type="button" data-discover-tex data-root="#repo_root" data-source="#source_dir" data-source-value="." data-glossary="#glossary_path" data-target="#tex_paths" data-file-list="#tex_file_list">Scansiona root progetto</button>
-              <button class="primary" type="button" data-discover-tex data-root="#repo_root" data-source="#source_dir" data-glossary="#glossary_path" data-target="#tex_paths" data-file-list="#tex_file_list">Scansiona cartella scelta</button>
-            </div>
-          </section>
-        </div>
-        <input type="hidden" id="tex_paths" name="tex_paths">
-        <div id="tex_file_list" class="file-list" aria-live="polite">
-          <p class="empty-state">Nessun documento selezionato.</p>
-        </div>
-        <p id="tex_discover_status" class="status-line" aria-live="polite"></p>
-        <div class="inline-add">
-          <input id="manual_tex_path" placeholder="percorso/relativo/documento.tex">
-          <button type="button" data-add-file data-source="#manual_tex_path" data-target="#tex_paths" data-file-list="#tex_file_list">Aggiungi</button>
-        </div>
-        <fieldset class="segmented-field">
-          <legend>Ordine revisione manuale</legend>
-          <p class="muted">Scegli come scorrere le occorrenze quando ci sono termini in modalità Manuale.</p>
-          <label><input type="radio" name="review_order" value="by_term" {% if local.last_review_order != "by_file" %}checked{% endif %} data-persist> Per termine</label>
-          <label><input type="radio" name="review_order" value="by_file" {% if local.last_review_order == "by_file" %}checked{% endif %} data-persist> Per file</label>
-        </fieldset>
-      </section>
-    {% else %}
-      <section class="input-group guided-block">
-        <p class="section-kicker">Passo 2</p>
-        <h2>Nuove voci</h2>
-        <p class="muted">Inserisci gli ID delle voci appena aggiunte al glossario. Se lasci vuoto, l'app usa tutte le voci disponibili.</p>
-        <label>ID delle nuove voci, separati da virgola
-          <input name="new_entry_ids" value="{{ local.last_new_entry_ids }}" placeholder="accuratezza, precisione" data-persist>
-        </label>
+  <form method="post" class="stack" data-wizard-form>
+    <input type="hidden" name="job_id" value="{{ job.id }}">
+    {% if job_locked %}
+      <section class="alert alert-warning">
+        <p>Il job corrente è già stato avviato. La rilevazione automatico/manuale delle voci è fissata nello snapshot di elaborazione: per modificarla devi chiudere questo job e rifare il processo dall'inizio.</p>
       </section>
     {% endif %}
-
-    <section class="form-section guided-block">
+    <section class="form-section guided-block glossary-review-panel">
       <div>
-        <div>
-          <p class="section-kicker">Passo 3</p>
-          <h2>Glossario rilevato</h2>
-          <p class="muted">Le voci sono salvate in <code>{{ entries_path.name }}</code>. Da qui puoi solo consultare la lista usata per il linking e modificare Automatico/Manuale.</p>
-        </div>
+        <p class="section-kicker">Passo finale configurazione</p>
+        <h2>Glossario HTML</h2>
+        <p class="muted">Conferma l'URL che i documenti useranno per aprire il glossario HTML.</p>
       </div>
+
+      <label>URL glossario HTML
+        <input id="glossary_html_url" name="glossary_html_url" value="{{ config.glossary_html_url or local_glossary_html_url }}" placeholder="{{ local_glossary_html_url }}" data-persist>
+      </label>
+
       <div class="stats compact-stats">
-        <div><strong>{{ entries | length }}</strong><span>Termini rilevati</span></div>
-        <div><strong>{{ entries | selectattr("mode", "equalto", "manual") | list | length }}</strong><span>Revisione manuale</span></div>
+        <div><strong>{{ entries | length }}</strong><span>Termini</span></div>
+        <div><strong>{{ entries | selectattr("mode", "equalto", "manual") | list | length }}</strong><span>Manuali</span></div>
         <div><strong>{{ entries | rejectattr("mode", "equalto", "manual") | list | length }}</strong><span>Automatici</span></div>
       </div>
-      <div class="actions glossary-actions">
-        <button type="button" data-refresh-glossary>Aggiorna voci</button>
-        <a class="button-link" href="{{ url_for('entries') }}">Consulta glossario</a>
+
+      <div class="entries-toolbar glossary-review-toolbar">
+        <div>
+          <h3>Entry rilevate</h3>
+          <p class="muted">Controlla e modifica termini, definizioni, alias e modalità.</p>
+        </div>
+        <div class="actions">
+          <button type="button" data-refresh-glossary {% if job_locked %}disabled title="Job già avviato: riavvia il processo per modificare la rilevazione"{% endif %}>Aggiorna dal .tex</button>
+          <a class="button-link button-accent" href="{{ url_for('entries', job_id=job.id, return_to='glossary') }}">Vista completa</a>
+        </div>
       </div>
       <p id="glossary_preview_status" class="status-line" aria-live="polite"></p>
+      
+      <div id="glossary_entries_preview" class="entries-preview-list">
+        {% for entry in entries %}
+          <div class="entry-row-preview">
+            <input type="hidden" name="entry_id" value="{{ entry.id }}">
+            <strong>{{ entry.term }}</strong>
+            <span class="badge {{ entry.mode }}">{{ entry.mode }}</span>
+          </div>
+        {% endfor %}
+      </div>
     </section>
 
     <div class="flow-actions flow-actions-between">
-      <a class="button-link" href="{{ url_for('operation') }}">Torna alla home</a>
-      <div class="actions">
-        <a class="button-link" href="{{ url_for('settings', tab='rules') }}">Controlla regole</a>
-        <button class="primary" name="action" value="continue" type="submit">Avvia elaborazione</button>
-      </div>
+      <a class="button-link button-back" href="{{ url_for('rules_step', job_id=job.id) }}">Indietro</a>
+      <button class="primary" name="action" value="continue" type="submit">{% if job_locked %}Torna al job corrente{% else %}Avvia elaborazione{% endif %}</button>
     </div>
   </form>
 </section>

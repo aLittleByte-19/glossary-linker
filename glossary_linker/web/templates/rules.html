@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+
+{% block progress %}
+<nav class="workflow-progress" aria-label="Avanzamento">
+  <a href="{{ url_for('project_step', job_id=job.id) }}">Operazione</a>
+  <a href="{{ url_for('files_step', job_id=job.id) }}">Documenti</a>
+  <a class="active" aria-current="step" href="{{ url_for('rules_step', job_id=job.id) }}">Regole</a>
+  <a href="{{ url_for('glossary_step', job_id=job.id) }}">Glossario</a>
+  <span class="disabled">Revisione</span>
+  <span class="disabled">Output</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+<section class="panel">
+  <div class="page-head">
+    <div>
+      <h1>Regole editoriali</h1>
+      <p>Configura quali parti del documento ignorare e quali file escludere.</p>
+    </div>
+    <div class="page-actions">
+      <a class="button-link button-back" href="{{ url_for('files_step', job_id=job.id) }}">Indietro</a>
+    </div>
+  </div>
+
+  <form method="post" class="stack" data-wizard-form>
+    <section id="rule-sections" class="form-section rules-section">
+      <div>
+        <h2>Sezioni ignorate</h2>
+        <p class="muted">Evita link in parti del documento dove i rimandi al glossario sono indesiderati.</p>
+      </div>
+      <div class="checks">
+        <label class="check"><input type="checkbox" name="ignored_sections" value="frontespizio" {% if "frontespizio" in config.ignored_sections %}checked{% endif %}> Salta frontespizio</label>
+        <label class="check"><input type="checkbox" name="ignored_sections" value="indice" {% if "indice" in config.ignored_sections %}checked{% endif %}> Salta indici</label>
+        <label class="check"><input type="checkbox" name="skip_titles" {% if "section" in config.ignored_commands %}checked{% endif %}> Salta titoli e didascalie</label>
+      </div>
+    </section>
+
+    <section id="rule-files" class="rule-editor" data-rule-editor data-target="#exclude_file_patterns" data-values='{{ config.exclude_file_patterns | tojson }}'>
+      <div>
+        <h2>Pattern file esclusi</h2>
+        <p class="muted">Usa glob relativi alla root del progetto.</p>
+      </div>
+      <textarea id="exclude_file_patterns" name="exclude_file_patterns" hidden>{{ config.exclude_file_patterns | join('\n') }}</textarea>
+      <ol class="rule-list" data-rule-list></ol>
+      <div class="rule-controls">
+        <input data-rule-input placeholder="es. **/build/**">
+        <button type="button" data-rule-add>Aggiungi</button>
+        <button type="button" data-rule-edit>Modifica</button>
+        <button type="button" data-rule-delete>Elimina</button>
+      </div>
+    </section>
+
+    <section id="rule-envs" class="rule-editor" data-rule-editor data-target="#ignored_environments" data-values='{{ config.ignored_environments | tojson }}'>
+      <div>
+        <h2>Ambienti LaTeX ignorati</h2>
+        <p class="muted">Il contenuto di questi ambienti non viene analizzato (es. <code>verbatim</code>).</p>
+      </div>
+      <textarea id="ignored_environments" name="ignored_environments" hidden>{{ config.ignored_environments | join('\n') }}</textarea>
+      <ol class="rule-list" data-rule-list></ol>
+      <div class="rule-controls">
+        <input data-rule-input placeholder="es. minted">
+        <button type="button" data-rule-add>Aggiungi</button>
+        <button type="button" data-rule-edit>Modifica</button>
+        <button type="button" data-rule-delete>Elimina</button>
+      </div>
+    </section>
+
+    <section id="rule-commands" class="rule-editor" data-rule-editor data-target="#ignored_commands" data-values='{{ config.ignored_commands | tojson }}'>
+      <div>
+        <h2>Comandi LaTeX ignorati</h2>
+        <p class="muted">Gli argomenti di questi comandi vengono ignorati.</p>
+      </div>
+      <textarea id="ignored_commands" name="ignored_commands" hidden>{{ config.ignored_commands | join('\n') }}</textarea>
+      <ol class="rule-list" data-rule-list></ol>
+      <div class="rule-controls">
+        <input data-rule-input placeholder="es. caption">
+        <button type="button" data-rule-add>Aggiungi</button>
+        <button type="button" data-rule-edit>Modifica</button>
+        <button type="button" data-rule-delete>Elimina</button>
+      </div>
+    </section>
+
+    <div class="flow-actions flow-actions-between">
+      <a class="button-link button-back" href="{{ url_for('files_step', job_id=job.id) }}">Indietro</a>
+      <button class="primary" type="submit">Avanti</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

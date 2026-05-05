@@ -1,7 +1,11 @@
-glossary_pdf_url: vendor/documentazione-glossario/RTB/Glossario/Glossario.pdf
+glossary_html_url: http://127.0.0.1:8765/glossary-html
+glossary_html_path: vendor/documentazione-source/Glossario.html
 glossary_path: vendor/documentazione-glossario/RTB/Glossario/Glossario.tex
-anchor_format: '#nameddest=gls:{id}'
+html_anchor_format: '#gls-{id}'
 glossary_detection: auto
+glossary_custom_command: ''
+glossary_structure_description: Rileva automaticamente il comando LaTeX piu probabile
+  oppure usa \subsection{Termine}.
 excluded_entry_ids: []
 exclude_file_patterns:
 - '*.linked.tex'
@@ -10,7 +14,12 @@ exclude_file_patterns:
 - '**/dist/**'
 - '**/tmp/**'
 - '**/prove/**'
+- '**/bozze/**'
+- '**/prompt/**'
 - '**/prompt.tex'
+- '**/*prompt*.tex'
+- '**/*prova*.tex'
+- '**/*bozza*.tex'
 ignored_environments:
 - verbatim
 - lstlisting
@@ -29,8 +38,10 @@ ignored_commands:
 - paragraph
 - subparagraph
 - title
+- author
+- date
 - caption
 ignored_sections:
-- frontespizio
 - indice
+- frontespizio
 entries: {}

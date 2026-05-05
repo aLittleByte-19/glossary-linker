@@ -12,23 +12,39 @@ from .models import GlossaryEntry
 from .text import parse_braced_argument, slugify, strip_latex
 
 
-STRUCTURED_RE = re.compile(r"\\glossaryentry\s*")
-SUBSECTION_RE = re.compile(r"\\subsection\*?\s*")
+CUSTOM_COMMAND_EXCLUSIONS = {
+    "begin",
+    "end",
+    "caption",
+    "cite",
+    "citep",
+    "citet",
+    "emph",
+    "glslink",
+    "href",
+    "hypertarget",
+    "includegraphics",
+    "input",
+    "item",
+    "label",
+    "nameref",
+    "pageref",
+    "paragraph",
+    "ref",
+    "section",
+    "subparagraph",
+    "subsection",
+    "subsubsection",
+    "textbf",
+    "textit",
+    "title",
+    "url",
+}
 
 
 def parse_glossary_text(text: str, config: EditorialConfig | None = None) -> list[GlossaryEntry]:
-    mode = (config.glossary_detection if config else "auto") or "auto"
     source = _document_body(_strip_glossary_command_definitions(text))
-    structured = _parse_structured_entries(source)
-
-    if mode == "structured":
-        entries = structured
-    elif mode == "subsection":
-        entries = _parse_subsection_entries(source)
-    else:
-        entries = structured if structured else _parse_subsection_entries(source)
-
-    entries = _deduplicate_entries(entries)
+    entries = _detect_entries(source, config)
     if config:
         excluded = set(config.excluded_entry_ids)
         entries = [entry for entry in entries if entry.id not in excluded]
@@ -46,10 +62,11 @@ def merge_config(entries: list[GlossaryEntry], config: EditorialConfig) -> list[
         overrides = config.entries.get(entry.id, {})
         aliases = _merge_aliases(entry.aliases, overrides.get("aliases", []))
         mode = overrides.get("mode", entry.mode)
+        definition = overrides.get("definition", entry.definition)
         merged.append(GlossaryEntry(
             id=entry.id,
             term=entry.term,
-            definition=entry.definition,
+            definition=definition,
             aliases=list(aliases or []),
             mode="manual" if mode == "manual" else "automatic",
         ))
@@ -59,17 +76,31 @@ def merge_config(entries: list[GlossaryEntry], config: EditorialConfig) -> list[
 def load_entries_store(path: Path) -> list[GlossaryEntry]:
     if not path.exists():
         return []
-    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError as exc:
+        raise ValueError(f"Entries store {path} is not valid YAML: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ValueError(f"Entries store {path} must contain a mapping.")
     raw_entries = data.get("entries", [])
+    if raw_entries is None:
+        raw_entries = []
+    if not isinstance(raw_entries, list):
+        raise ValueError(f"Entries store {path} field 'entries' must be a list.")
     entries: list[GlossaryEntry] = []
     for item in raw_entries:
         if not isinstance(item, dict) or not item.get("id") or not item.get("term"):
             continue
+        aliases = item.get("aliases") or []
+        if isinstance(aliases, str):
+            aliases = [part.strip() for part in aliases.split(",") if part.strip()]
+        elif not isinstance(aliases, list):
+            aliases = []
         entries.append(GlossaryEntry(
             id=str(item["id"]),
             term=str(item["term"]),
             definition=str(item.get("definition", "")),
-            aliases=list(item.get("aliases") or []),
+            aliases=[str(alias) for alias in aliases],
             mode="manual" if item.get("mode") == "manual" else "automatic",
         ))
     return entries
@@ -89,7 +120,10 @@ def save_entries_store(entries: list[GlossaryEntry], path: Path) -> None:
     payload: dict[str, Any] = {
         "entries": [asdict(entry) for entry in sorted(cleaned, key=lambda item: item.term.casefold())]
     }
-    path.write_text(yaml.safe_dump(payload, sort_keys=False, allow_unicode=True), encoding="utf-8")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    tmp_path.write_text(yaml.safe_dump(payload, sort_keys=False, allow_unicode=True), encoding="utf-8")
+    tmp_path.replace(path)
 
 
 def merge_detected_with_store(detected: list[GlossaryEntry], stored: list[GlossaryEntry]) -> tuple[list[GlossaryEntry], int]:
@@ -112,33 +146,53 @@ def merge_detected_with_store(detected: list[GlossaryEntry], stored: list[Glossa
     return merged, new_count
 
 
-def _parse_structured_entries(text: str) -> list[GlossaryEntry]:
-    matches: list[tuple[int, int, str, str]] = []
-    for match in STRUCTURED_RE.finditer(text):
-        first = text.find("{", match.end())
-        parsed_id = parse_braced_argument(text, first)
-        if not parsed_id:
-            continue
-        parsed_term = parse_braced_argument(text, parsed_id[1])
-        if not parsed_term:
-            continue
-        entry_id = slugify(parsed_id[0].strip())
-        term = strip_latex(parsed_term[0])
-        if not entry_id or not _valid_detected_term(term):
-            continue
-        matches.append((match.start(), parsed_term[1], entry_id, term))
+def _detect_entries(text: str, config: EditorialConfig | None) -> list[GlossaryEntry]:
+    mode = (config.glossary_detection if config else "auto") or "auto"
+    if mode == "custom":
+        custom_command = (config.glossary_custom_command if config else "").strip()
+        return _deduplicate_entries(_parse_command_entries(text, custom_command) if custom_command else _parse_subsection_entries(text))
+    if mode == "subsection":
+        return _deduplicate_entries(_parse_subsection_entries(text))
+    return _deduplicate_entries(_parse_auto_entries(text))
 
-    entries: list[GlossaryEntry] = []
-    for index, (start, end, entry_id, term) in enumerate(matches):
-        next_start = matches[index + 1][0] if index + 1 < len(matches) else len(text)
-        definition = _definition_after(text[end:next_start])
-        entries.append(GlossaryEntry(id=entry_id, term=term, definition=definition, aliases=_suggest_aliases(term)))
+
+def _parse_auto_entries(text: str) -> list[GlossaryEntry]:
+    candidates: list[tuple[str, list[GlossaryEntry]]] = [("subsection", _parse_subsection_entries(text))]
+    for command in _candidate_entry_commands(text):
+        candidates.append((command, _parse_command_entries(text, command)))
+    candidates = [(name, entries) for name, entries in candidates if len(entries) >= 2]
+    if not candidates:
+        return _parse_subsection_entries(text)
+    _name, entries = max(candidates, key=lambda item: (len(item[1]), _average_definition_length(item[1])))
     return entries
 
 
+def _candidate_entry_commands(text: str) -> list[str]:
+    counts: dict[str, int] = {}
+    for match in re.finditer(r"\\([A-Za-z@]+)\*?\s*\{", text):
+        command = match.group(1)
+        if command in CUSTOM_COMMAND_EXCLUSIONS or len(command) < 2:
+            continue
+        parsed = parse_braced_argument(text, match.end() - 1)
+        if not parsed:
+            continue
+        term = strip_latex(parsed[0])
+        if _valid_detected_term(term):
+            counts[command] = counts.get(command, 0) + 1
+    return [command for command, count in counts.items() if count >= 2]
+
+
 def _parse_subsection_entries(text: str) -> list[GlossaryEntry]:
+    return _parse_command_entries(text, "subsection")
+
+
+def _parse_command_entries(text: str, command: str) -> list[GlossaryEntry]:
+    command = _normalize_command_name(command)
+    if not command:
+        return []
+    pattern = re.compile(rf"\\{re.escape(command)}\*?\s*")
     matches: list[tuple[int, int, str]] = []
-    for match in SUBSECTION_RE.finditer(text):
+    for match in pattern.finditer(text):
         first = text.find("{", match.end())
         parsed = parse_braced_argument(text, first)
         if not parsed:
@@ -157,14 +211,40 @@ def _parse_subsection_entries(text: str) -> list[GlossaryEntry]:
 
 def _definition_after(block: str) -> str:
     lines = []
+    # Interrompiamo se troviamo comandi di sezionamento che indicano una nuova parte del documento
+    stop_commands = r"\\(?:part|chapter|section|subsection|subsubsection|paragraph|subparagraph|newpage|clearpage)\b"
+    
     for line in block.splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("%") or stripped.startswith("\\label"):
+        trimmed = line.strip()
+        if re.search(stop_commands, trimmed):
+            break
+            
+        stripped = _clean_definition_line(trimmed)
+        if not stripped or stripped.startswith("%"):
             continue
         lines.append(strip_latex(stripped))
         if len(" ".join(lines)) > 260:
             break
     return " ".join(lines)[:320]
+
+
+def _clean_definition_line(line: str) -> str:
+    if not line:
+        return ""
+    cleaned = re.sub(r"\\(?:hyper)?target\{[^{}]*\}\{[^{}]*\}", "", line)
+    cleaned = re.sub(r"\\label\{[^{}]*\}", "", cleaned)
+    cleaned = re.sub(r"\\phantomsection\b", "", cleaned)
+    return cleaned.strip()
+
+
+def _normalize_command_name(command: str) -> str:
+    return command.strip().lstrip("\\").split("{", 1)[0].strip()
+
+
+def _average_definition_length(entries: list[GlossaryEntry]) -> float:
+    if not entries:
+        return 0
+    return sum(len(entry.definition) for entry in entries) / len(entries)
 
 
 def _document_body(text: str) -> str:

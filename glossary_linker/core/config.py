@@ -9,10 +9,13 @@ import yaml
 
 @dataclass(slots=True)
 class EditorialConfig:
-    glossary_pdf_url: str = ""
+    glossary_html_url: str = ""
+    glossary_html_path: str = "Glossario.html"
     glossary_path: str = "Glossario.tex"
-    anchor_format: str = "#nameddest=gls:{id}"
+    html_anchor_format: str = "#gls-{id}"
     glossary_detection: str = "auto"
+    glossary_custom_command: str = ""
+    glossary_structure_description: str = r"Rileva automaticamente il comando LaTeX piu probabile oppure usa \subsection{Termine}."
     excluded_entry_ids: list[str] = field(default_factory=list)
     exclude_file_patterns: list[str] = field(default_factory=lambda: [
         "*.linked.tex",
@@ -73,6 +76,7 @@ class LocalConfig:
     local_server_port: int = 8765
     auto_open_pdf: bool = True
     clean_aux_files: bool = True
+    clean_compile_artifacts: bool = True
     log_level: str = "INFO"
     preferred_browser: str = ""
 
@@ -80,7 +84,10 @@ class LocalConfig:
 def _load_yaml(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
-    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError as exc:
+        raise ValueError(f"Configuration file {path} is not valid YAML: {exc}") from exc
     if not isinstance(data, dict):
         raise ValueError(f"Configuration file {path} must contain a mapping.")
     return data
@@ -101,8 +108,16 @@ def load_local_config(path: Path) -> LocalConfig:
 
 
 def save_editorial_config(config: EditorialConfig, path: Path) -> None:
-    path.write_text(yaml.safe_dump(asdict(config), sort_keys=False, allow_unicode=True), encoding="utf-8")
+    _atomic_write_yaml(asdict(config), path)
 
 
 def save_local_config(config: LocalConfig, path: Path) -> None:
-    path.write_text(yaml.safe_dump(asdict(config), sort_keys=False, allow_unicode=True), encoding="utf-8")
+    _atomic_write_yaml(asdict(config), path)
+
+
+def _atomic_write_yaml(payload: dict[str, Any], path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = yaml.safe_dump(payload, sort_keys=False, allow_unicode=True)
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    tmp_path.write_text(text, encoding="utf-8")
+    tmp_path.replace(path)

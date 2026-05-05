@@ -4,7 +4,7 @@ entries:
   definition: Metrica monitorata dall'Analista Dati per osservare la precisione del
     sistema nello smistamento e riconoscimento automatico.
   aliases: []
-  mode: manual
+  mode: automatic
 - id: agile-scrum
   term: Agile SCRUM
   definition: Il metodo di lavoro usato dal team per sviluppare il software, basato
@@ -49,7 +49,7 @@ entries:
   definition: Figura responsabile della configurazione dell'ambiente standalone, della
     gestione dei privilegi degli account e della definizione delle policy globali.
   aliases: []
-  mode: manual
+  mode: automatic
 - id: analisi-dinamica
   term: Analisi Dinamica
   definition: Attività di verifica del codice eseguita durante la sua esecuzione.
@@ -64,7 +64,7 @@ entries:
   term: Analista
   definition: Ruolo incaricato dell'analisi dei requisiti e del dominio.
   aliases: []
-  mode: manual
+  mode: automatic
 - id: analista-dati
   term: Analista Dati
   definition: Figura che supervisiona l'efficienza del sistema, monitorando le performance
@@ -90,17 +90,17 @@ entries:
   definition: Ruolo ricoperto da un utente o da un sistema esterno che interagisce
     con l'applicazione (es. Amministratore, Redattore, Operatore CdL).
   aliases: []
-  mode: manual
+  mode: automatic
 - id: audit-trail
   term: Audit Trail
   definition: Un registro che tiene traccia di tutte le operazioni fatte nel sistema,
-    utile per controllare chi ha fatto cosa e quando. B
+    utile per controllare chi ha fatto cosa e quando.
   aliases: []
   mode: automatic
 - id: branch-ramo
   term: Branch (Ramo)
   definition: Ramificazione separata del codice sorgente che permette lo sviluppo
-    isolato di funzionalità o documenti. C
+    isolato di funzionalità o documenti.
   aliases:
   - Branch
   - Ramo
@@ -182,7 +182,7 @@ entries:
 - id: copie-atomiche
   term: Copie Atomiche
   definition: Il risultato dello "split" di un documento massivo; sono le singole
-    parti destinate ai singoli dipendenti. D
+    parti destinate ai singoli dipendenti.
   aliases: []
   mode: automatic
 - id: dashboard
@@ -224,7 +224,7 @@ entries:
 - id: dispaccio-dispatch
   term: Dispaccio (Dispatch)
   definition: Il processo automatico che invia i documenti ai destinatari finali attraverso
-    l'app, l'email o la PEC. E
+    l'app, l'email o la PEC.
   aliases:
   - Dispaccio
   - Dispatch
@@ -245,7 +245,7 @@ entries:
 - id: estensione
   term: Estensione
   definition: Relazioni tra casi d'uso; l'inclusione indica un sotto-processo obbligatorio,
-    l'estensione un comportamento opzionale. G
+    l'estensione un comportamento opzionale.
   aliases: []
   mode: automatic
 - id: gdpr
@@ -262,7 +262,7 @@ entries:
 - id: github-gitlab
   term: GitHub/GitLab
   definition: Piattaforme web per l'hosting e la gestione collaborativa dei repository
-    tramite Pull Request e Issue. H
+    tramite Pull Request e Issue.
   aliases: []
   mode: automatic
 - id: hr-manager
@@ -275,7 +275,7 @@ entries:
   term: Human-in-the-Loop
   definition: Un approccio dove l'intelligenza artificiale fa il lavoro pesante, ma
     un essere umano interviene per controllare e correggere i risultati prima che
-    diventino definitivi. I
+    diventino definitivi.
   aliases: []
   mode: automatic
 - id: inclusione
@@ -293,14 +293,14 @@ entries:
 - id: issue
   term: Issue
   definition: Strumento per pianificare, assegnare e monitorare task o problemi all'interno
-    del repository. K
+    del repository.
   aliases: []
   mode: automatic
 - id: kpi-key-performance-indicator
   term: KPI (Key Performance Indicator)
   definition: Numeri o percentuali usati per misurare se il sistema sta funzionando
     bene (ad esempio, quante buste paga vengono riconosciute correttamente al primo
-    colpo). L
+    colpo).
   aliases:
   - KPI
   - Key Performance Indicator
@@ -328,7 +328,7 @@ entries:
 - id: lotto-documentale
   term: Lotto Documentale
   definition: Insieme di file (come i cedolini massivi) caricati simultaneamente nel
-    sistema per l'elaborazione. M
+    sistema per l'elaborazione.
   aliases: []
   mode: automatic
 - id: metadati-documento
@@ -374,7 +374,7 @@ entries:
 - id: mvp-minimum-viable-product
   term: MVP (Minimum Viable Product)
   definition: Versione del prodotto con le funzionalità minime necessarie per essere
-    rilasciato e testato. N
+    rilasciato e testato.
   aliases:
   - MVP
   - Minimum Viable Product
@@ -382,13 +382,13 @@ entries:
 - id: nexum
   term: Nexum
   definition: È la piattaforma digitale creata da Eggon per semplificare la comunicazione
-    e la gestione del lavoro tra aziende, dipendenti e consulenti del lavoro. O
+    e la gestione del lavoro tra aziende, dipendenti e consulenti del lavoro.
   aliases: []
   mode: automatic
 - id: ocr-riconoscimento-ottico-dei-caratteri
   term: OCR (Riconoscimento Ottico dei Caratteri)
   definition: Una tecnologia che legge automaticamente il testo contenuto all'interno
-    di immagini o documenti scannerizzati. P
+    di immagini o documenti scannerizzati.
   aliases:
   - OCR
   - Riconoscimento Ottico dei Caratteri
@@ -443,7 +443,7 @@ entries:
 - id: pull-request
   term: Pull Request
   definition: Richiesta di revisione e integrazione di modifiche da un branch a un
-    altro su GitHub. R
+    altro su GitHub.
   aliases: []
   mode: automatic
 - id: rating
@@ -467,7 +467,7 @@ entries:
     il modulo AI Assistant, responsabile della calibrazione del tono e della validazione
     dei contenuti.
   aliases: []
-  mode: manual
+  mode: automatic
 - id: repository-documentale
   term: Repository Documentale
   definition: Un archivio digitale dove vengono caricati e organizzati tutti i documenti
@@ -530,7 +530,7 @@ entries:
 - id: rtb-requirements-and-technology-baseline
   term: RTB (Requirements and Technology Baseline)
   definition: Fase del progetto che identifica una linea di base per i requisiti e
-    le tecnologie. S
+    le tecnologie.
   aliases:
   - RTB
   - Requirements and Technology Baseline
@@ -573,7 +573,7 @@ entries:
 - id: stile-editoriale
   term: Stile Editoriale
   definition: 'Come per il Tono Comunicativo: Parametri di configurazione (es. formale,
-    empatico, tecnico) che calibrano il registro dell''AI Assistant. T'
+    empatico, tecnico) che calibrano il registro dell''AI Assistant.'
   aliases: []
   mode: automatic
 - id: test-di-integrazione
@@ -608,7 +608,7 @@ entries:
   mode: automatic
 - id: trigger
   term: Trigger
-  definition: Evento o azione che innesca l'esecuzione di un caso d'uso. V
+  definition: Evento o azione che innesca l'esecuzione di un caso d'uso.
   aliases: []
   mode: automatic
 - id: verbale-esterno
@@ -632,7 +632,7 @@ entries:
 - id: versioning
   term: Versioning
   definition: È il sistema che tiene traccia delle diverse versioni di un documento
-    o di un codice, permettendo di vedere cosa è cambiato nel tempo. W
+    o di un codice, permettendo di vedere cosa è cambiato nel tempo.
   aliases: []
   mode: automatic
 - id: way-of-working-wow

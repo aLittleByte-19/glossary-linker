@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block progress %}
+<nav class="workflow-progress" aria-label="Avanzamento">
+  <a href="{{ url_for('project_step', job_id=job.id) }}">Operazione</a>
+  <a class="active" aria-current="step" href="{{ url_for('files_step', job_id=job.id) }}">Documenti</a>
+  <a href="{{ url_for('rules_step', job_id=job.id) }}">Regole</a>
+  <a href="{{ url_for('glossary_step', job_id=job.id) }}">Glossario</a>
+  <span class="disabled">Revisione</span>
+  <span class="disabled">Output</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+<section class="panel">
+  <div class="page-head">
+    <div>
+      <h1>Sorgenti LaTeX</h1>
+      <p>Scegli i documenti che dovranno contenere i link al glossario.</p>
+    </div>
+    <div class="page-actions">
+      <a class="button-link button-back" href="{{ url_for('project_step', job_id=job.id) }}">Indietro</a>
+    </div>
+  </div>
+
+  <form method="post" class="stack" data-wizard-form>
+    <section class="input-group guided-block">
+      <label>Root progetto
+        <span class="field-with-action wide">
+          <input id="repo_root" name="repo_root" value="{{ job.root }}" data-persist>
+          <button type="button" data-picker data-kind="directory" data-target="#repo_root">Scegli</button>
+        </span>
+      </label>
+
+      <div class="document-source-grid">
+        <section class="source-card">
+          <h3>Selezione manuale</h3>
+          <p class="muted">Scegli uno o più documenti specifici dal file system.</p>
+          <button type="button" data-picker data-kind="file" data-multiple="true" data-target="#tex_paths" data-root="#repo_root" data-file-list="#tex_file_list">Scegli file</button>
+        </section>
+        <section class="source-card">
+          <h3>Scansione automatica</h3>
+          <p class="muted">Rileva tutti i <code>.tex</code> nella root progetto oppure in una cartella scelta.</p>
+          <label>Cartella da scansionare
+            <span class="field-with-action wide">
+              <input id="source_dir" name="source_dir" value="{{ local.last_source_dir or '.' }}" placeholder="." data-persist>
+              <button type="button" data-picker data-kind="directory" data-target="#source_dir">Scegli</button>
+            </span>
+          </label>
+          <div class="scan-actions">
+            <button type="button" data-discover-tex data-root="#repo_root" data-source-value="." data-target="#tex_paths" data-file-list="#tex_file_list">Scansiona root</button>
+            <button class="primary" type="button" data-discover-tex data-root="#repo_root" data-source="#source_dir" data-target="#tex_paths" data-file-list="#tex_file_list">Scansiona cartella</button>
+          </div>
+        </section>
+      </div>
+
+      <textarea id="tex_paths" name="tex_paths" hidden data-persist>{{ job.paths | join('\n') }}</textarea>
+      <div id="tex_file_list" class="file-list" aria-live="polite">
+        {% if job.paths %}
+          {% for path in job.paths %}
+            <div class="file-chip"><code>{{ path }}</code></div>
+          {% endfor %}
+        {% else %}
+          <p class="empty-state">Nessun documento selezionato.</p>
+        {% endif %}
+      </div>
+      
+      <p id="tex_discover_status" class="status-line" aria-live="polite"></p>
+
+      <fieldset class="segmented-field">
+        <legend>Ordine revisione manuale</legend>
+        <p class="muted">Scegli come scorrere le occorrenze dei termini manuali.</p>
+        <label><input type="radio" name="review_order" value="by_term" {% if job.review_order != "by_file" %}checked{% endif %}> Per termine</label>
+        <label><input type="radio" name="review_order" value="by_file" {% if job.review_order == "by_file" %}checked{% endif %}> Per file</label>
+      </fieldset>
+    </section>
+
+    <div class="flow-actions flow-actions-between">
+      <a class="button-link button-back" href="{{ url_for('project_step', job_id=job.id) }}">Indietro</a>
+      <button class="primary" type="submit">Avanti</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

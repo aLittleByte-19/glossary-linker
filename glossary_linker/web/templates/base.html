@@ -4,12 +4,13 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Glossary Linker</title>
+    <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <script defer src="{{ url_for('static', filename='picker.js') }}"></script>
   </head>
   <body>
     <header class="topbar">
-      <a class="brand" href="{{ url_for('operation') }}">
+      <a class="brand" href="{{ url_for('project_step') }}">
         <span class="brand-mark" aria-hidden="true">G</span>
         <span>
           <strong>Glossary Linker</strong>

@@ -1,15 +1,17 @@
 {% extends "base.html" %}
 {% block progress %}
 <nav class="workflow-progress" aria-label="Avanzamento">
-  <a href="{{ url_for('operation') }}">Operazione</a>
-  <a href="{{ url_for('glossary_rules') }}">Regole</a>
-  <a class="active" href="{{ url_for('review', job_id=job_id, index=index) }}">Revisione</a>
+  <a href="{{ url_for('project_step', job_id=job_id) }}">Operazione</a>
+  <a href="{{ url_for('files_step', job_id=job_id) }}">Documenti</a>
+  <a href="{{ url_for('rules_step', job_id=job_id) }}">Regole</a>
+  <a href="{{ url_for('glossary_step', job_id=job_id) }}">Glossario</a>
+  <a class="active" aria-current="step" href="{{ url_for('review', job_id=job_id, index=index) }}">Revisione</a>
   <a href="{{ url_for('output', job_id=job_id) }}">Output</a>
 </nav>
 {% endblock %}
 {% block content %}
 <section class="panel review-panel">
-  <form method="post" class="review-layout">
+  <form method="post" class="review-layout" data-review-form data-review-api="{{ url_for('api_decision', job_id=job_id) }}">
     <header class="review-header">
       <button name="action" value="prev" type="submit" class="nav-button" {% if index == 0 %}disabled{% endif %}>Indietro</button>
       <div>
@@ -17,10 +19,38 @@
         <h1>Occorrenza {{ index + 1 }} di {{ total }}</h1>
         <p class="muted">Termine {{ term_index }} di {{ term_total }} · Occorrenza {{ same_term_index }} di {{ same_term_total }} per il termine corrente</p>
       </div>
-      <button name="action" value="next" type="submit" class="nav-button" {% if index + 1 == total %}disabled{% endif %}>Avanti</button>
+      <button name="action" value="next" type="submit" class="nav-button nav-button-forward" {% if index + 1 == total %}disabled{% endif %}>Avanti</button>
     </header>
 
+    <div class="review-command-bar">
+      <a class="button-link button-back" href="{{ previous_step_url }}">Torna al glossario</a>
+      <button name="action" value="next_pending" type="submit" {% if pending_count == 0 %}disabled{% endif %}>Prossima da decidere</button>
+      <button class="primary" name="action" value="finish" type="submit">Vai al report</button>
+    </div>
+
+    <section class="review-progress-panel" aria-label="Stato revisione">
+      <div>
+        <strong>{{ decided_count }}</strong>
+        <span>scelte salvate</span>
+      </div>
+      <div>
+        <strong>{{ pending_count }}</strong>
+        <span>da decidere</span>
+      </div>
+      <div>
+        <strong>{{ total }}</strong>
+        <span>occorrenze totali</span>
+      </div>
+    </section>
+
     <section class="review-term">
+      <div class="review-term-focus">
+        <p class="eyebrow">{% if is_alias_match %}Alias rilevato{% else %}Termine rilevato{% endif %}</p>
+        <h2>{{ detected_label }}</h2>
+        {% if is_alias_match %}
+          <p class="muted">Voce del glossario: <strong>{{ canonical_label }}</strong></p>
+        {% endif %}
+      </div>
       <h2>Definizione dal glossario</h2>
       <p>{{ entry.definition or "Nessuna definizione disponibile nel glossario." }}</p>
     </section>
@@ -50,7 +80,7 @@
     <section class="decision-panel">
       <div>
         <h2>Azioni estese</h2>
-        <p class="muted">Usale quando la stessa decisione vale per piu occorrenze. Puoi ancora tornare indietro e cambiare le scelte prima del report.</p>
+        <p class="muted">Usale quando la stessa decisione vale per piu occorrenze. Resti nella revisione e puoi cambiare le scelte prima del report.</p>
       </div>
 
       <div class="bulk-actions">
@@ -76,12 +106,11 @@
         </section>
         <section class="bulk-action-card">
           <div>
-            <h3>File e report</h3>
-            <p>Scarta il file corrente o chiudi la revisione.</p>
+            <h3>Nel file corrente</h3>
+            <p>Marca come saltate tutte le occorrenze del documento aperto.</p>
           </div>
-          <div class="bulk-action-buttons">
+          <div class="bulk-action-buttons single-action">
             <button class="danger-action" name="action" value="skip_file" type="submit">Salta file</button>
-            <button name="action" value="finish" type="submit">Vai al report</button>
           </div>
         </section>
       </div>
@@ -90,12 +119,34 @@
         <div>
           <h2>Decisione su questa occorrenza</h2>
           <p class="muted">Questa scelta vale solo per la parola evidenziata nel contesto.</p>
+          <p class="review-save-status" data-review-status aria-live="polite"></p>
         </div>
-        <div class="decision-grid primary-decisions">
-          <button class="danger-primary" name="action" value="skip" type="submit">Salta</button>
-          <button class="success-primary" name="action" value="link" type="submit">Collega</button>
+        <div class="decision-grid primary-decisions" data-occurrence-id="{{ occurrence.id }}" data-current-index="{{ index }}">
+          <button class="danger-primary" name="action" value="skip" type="submit" data-ajax-decision>Salta</button>
+          <button class="success-primary" name="action" value="link" type="submit" data-ajax-decision>Collega</button>
         </div>
       </div>
+    </section>
+
+    <section class="review-summary-panel">
+      <div class="section-head">
+        <div>
+          <h2>Scelte della revisione</h2>
+          <p class="muted">Riapri qualunque occorrenza per controllare o modificare la decisione.</p>
+        </div>
+      </div>
+      <ol class="review-choice-list">
+        {% for item in summary_items %}
+          <li class="{% if item.current %}current{% endif %}">
+            <a href="{{ url_for('review', job_id=job_id, index=item['index']) }}" {% if item.current %}aria-current="true"{% endif %}>
+              <span>{{ item["index"] + 1 }}</span>
+              <strong>{{ item.term }}</strong>
+              <small>{{ item.file }}:{{ item.line }}</small>
+              <em class="decision-chip {{ item.decision_class }}">{{ item.decision }}</em>
+            </a>
+          </li>
+        {% endfor %}
+      </ol>
     </section>
   </form>
 </section>

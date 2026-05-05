@@ -1,150 +1,99 @@
-# glossary-linker
+# Glossary Linker
 
-Applicazione locale per collegare documenti LaTeX alle voci di un glossario
-pubblicato come PDF, con revisione manuale per i termini ambigui.
+![Home dell'applicazione](docs/screenshots/01-operazione.png)
 
-## Stato
+Glossary Linker è un'app locale per aggiungere link controllati al glossario dentro documenti LaTeX. Genera un glossario HTML con anchor stabili, inserisce nei documenti la macro `\glslink{id}{testo visibile}` e lascia all'utente la revisione dei termini ambigui.
 
-Prima versione funzionale:
+Il flusso è pensato per non toccare subito i sorgenti: l'app produce prima file `.linked.tex` e solo nella schermata finale permette di salvare o sovrascrivere.
 
-- core Python indipendente dalla GUI;
-- wizard web locale con Flask;
-- configurazione editoriale condivisa in `glossary-linker.yml`;
-- configurazione personale non versionata in `glossary-linker.local.yml`;
-- parser glossario per `\subsection{Termine}` e `\glossaryentry{id}{Termine}`;
-- formattatore per caricare/incollare un glossario `.tex` e normalizzarlo;
-- linking conservativo con macro `\glslink{id}{testo visibile}`;
-- revisione manuale occorrenza per occorrenza;
-- report finale in Markdown o JSON;
-- compilazione PDF tramite LaTeX installato localmente.
+## Installazione
 
-## Installazione locale
-
-Modo rapido su macOS/Linux:
+Su macOS/Linux:
 
 ```bash
 scripts/install.sh
 ```
 
-Modo rapido su Windows PowerShell:
+Su Windows PowerShell:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\install.ps1
 ```
 
-Gli script creano `.venv`, installano l'app in modo editabile e preparano
-`glossary-linker.local.yml` se non esiste. Per installare anche pytest:
+Per installare anche gli strumenti di test usa `--dev` su macOS/Linux o `-Dev` su PowerShell. Gli script creano la virtualenv e installano il pacchetto in modo editabile.
 
-```bash
-scripts/install.sh --dev
-```
+## Avvio
 
-oppure:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\install.ps1 -Dev
-```
-
-Installazione manuale equivalente:
-
-```bash
-python3 -m venv .venv
-. .venv/bin/activate
-pip install -e ".[dev]"
-cp glossary-linker.local.example.yml glossary-linker.local.yml
-```
-
-## Avvio wizard
-
-Se hai usato lo script rapido:
+Su macOS/Linux:
 
 ```bash
 .venv/bin/glossary-linker
 ```
 
-su Windows:
+Su Windows:
 
 ```powershell
 .\.venv\Scripts\glossary-linker.exe
 ```
 
-Se invece hai attivato manualmente la virtualenv:
+Poi apri `http://127.0.0.1:8765`. La porta e le preferenze del computer stanno in `glossary-linker.local.yml`, che non va versionato.
 
-```bash
-glossary-linker
+## Funzionalità principali
+
+L'app copre tre operazioni fondamentali per la gestione di un progetto LaTeX:
+
+1. **Linkare documenti**: Scansiona i sorgenti e inserisce i link al glossario.
+2. **Aggiornamento**: Aggiorna documenti già linkati con nuove voci aggiunte al glossario.
+3. **Formattazione**: Trasforma un glossario `.tex` (basato su `\subsection` o comandi custom) in un HTML navigabile.
+
+### Revisione Editoriale
+Il cuore del tool è la revisione manuale: per ogni termine ambiguo o marcato come "manuale", l'app mostra il contesto esatto nel sorgente LaTeX per permetterti di decidere se inserire il link o saltarlo.
+
+![Revisione delle occorrenze](docs/screenshots/04-revisione.png)
+*Esempio di revisione manuale: l'utente decide se inserire il link in base al contesto.*
+
+### Glossario HTML
+I link inseriti puntano a un glossario HTML moderno, ricercabile e pronto per la pubblicazione.
+
+![Glossario HTML generato](docs/screenshots/06-glossary-html.png)
+*Il glossario HTML finale con ricerca e navigazione rapida.*
+
+## Configurazione
+
+Il comportamento del linker è guidato da `glossary-linker.yml`:
+
+```yaml
+glossary_html_url: http://127.0.0.1:8765/glossary-html
+glossary_html_path: Glossario.html
+html_anchor_format: "#gls-{id}"
 ```
 
-Poi apri `http://127.0.0.1:8765`.
+In locale conviene lasciare l'URL dell'app. Per la pubblicazione sostituisci `glossary_html_url` con l'URL remoto dello stesso HTML generato.
 
-La porta si configura in `glossary-linker.local.yml`.
+## Documentazione
 
-I campi che richiedono file, cartelle o binari possono essere compilati a mano
-oppure tramite il pulsante `Scegli`, che apre la finestra nativa del filesystem.
-Se il sistema non consente finestre native dal processo locale, il campo rimane
-comunque editabile manualmente.
+La guida completa è in [docs/USER_GUIDE.md](docs/USER_GUIDE.md). Lì trovi il flusso consigliato, le regole editoriali, la revisione manuale, l'output e la risoluzione dei problemi comuni.
 
-## Flusso principale
+## CLI
 
-1. Scegli l'operazione.
-2. Indica glossario, URL finale di `Glossario.pdf` e documenti da processare.
-3. Carica o incolla un glossario `.tex` se deve essere formattato.
-4. Controlla la preview delle voci e imposta ogni voce su Automatico o Manuale.
-5. Revisiona le occorrenze manuali.
-6. Salva gli output `.linked.tex`, sovrascrivi solo su conferma o compila PDF.
-
-## Formato glossario
-
-Il parser legge sia il formato attuale:
-
-```tex
-\subsection{Accuratezza}
-Misura quanto una previsione e corretta.
-```
-
-sia il formato strutturato:
-
-```tex
-\glossaryentry{accuratezza}{Accuratezza}
-Misura quanto una previsione e corretta.
-```
-
-Il wizard include una sezione "Inserisci o formatta glossario .tex" che converte
-le `\subsection{...}` in `\glossaryentry{id}{...}` e aggiunge la macro:
-
-```tex
-\providecommand{\glossaryentry}[2]{\subsection{#2}\label{gls:#1}}
-```
-
-## Formato link nei documenti
-
-I documenti non ricevono `\href{...}{...}` sparsi nel testo. L'app inserisce:
-
-```tex
-\glslink{id}{testo visibile}
-```
-
-e aggiunge nel preambolo, se manca, una definizione basata su
-`glossary_pdf_url` e `anchor_format` in `glossary-linker.yml`.
-
-## CLI minima
+La CLI usa lo stesso core della GUI:
 
 ```bash
 glossary-linker-cli examples/documento.tex --config glossary-linker.yml
 ```
 
-La CLI usa lo stesso core della GUI ed e pensata come base per automazioni
-future.
+È pensata soprattutto per automazioni future; il wizard web resta il percorso principale.
 
-## Note di sicurezza editoriale
+## Test
 
-L'app non modifica mai direttamente i sorgenti senza conferma. Produce prima
-file `.linked.tex`, evita il preambolo, link gia esistenti, URL, ambienti
-verbatim/listing/minted e comandi configurati. Il linking automatico non
-pretende correttezza semantica totale: i termini in modalita Manuale servono
-proprio a gestire ambiguita e contesto.
+Con le dipendenze dev installate:
 
-## Fixture locali
+```bash
+pytest -q
+```
 
-Per provare l'app su repository esterni senza modificarli, scarica archive ZIP
-o copia directory prive di `.git` sotto `vendor/`. La directory `vendor/` e
-ignorata da git.
+Per eliminare artifact temporanei LaTeX da una directory:
+
+```bash
+scripts/clean_latex_artifacts.py .
+```

@@ -44,6 +44,22 @@ class Occurrence:
 
 
 @dataclass(slots=True)
+class Job:
+    id: str
+    config: dict
+    entries: list[dict]
+    paths: list[str]
+    root: str
+    excluded: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    review_order: str = "by_term"
+    occurrences: list[dict] = field(default_factory=list)
+    decisions: dict[str, bool] = field(default_factory=dict)
+    results: list[dict] = field(default_factory=list)
+    report: dict | None = None
+
+
+@dataclass(slots=True)
 class FileLinkResult:
     source_path: Path
     output_path: Path
