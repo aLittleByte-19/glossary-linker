@@ -4,7 +4,7 @@
 
 Glossary Linker è un'app locale per aggiungere link controllati al glossario dentro documenti LaTeX. Genera un glossario HTML con anchor stabili, inserisce nei documenti la macro `\glslink{id}{testo visibile}` e lascia all'utente la revisione dei termini ambigui.
 
-Il flusso è pensato per non toccare subito i sorgenti: l'app produce prima file `.linked.tex` e solo nella schermata finale permette di salvare o sovrascrrivere.
+Il flusso è pensato per non toccare subito i sorgenti: l'app produce prima file `.linked.tex` e solo nella schermata finale permette di salvare o sovrascrivere.
 
 ## Installazione
 
