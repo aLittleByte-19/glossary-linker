@@ -10,8 +10,11 @@
   <td><textarea class="definition-input" name="definition_{{ entry.id }}" rows="2">{{ entry.definition }}</textarea></td>
   <td><input class="alias-input" name="aliases_{{ entry.id }}" value="{{ entry.aliases | join(', ') }}" placeholder="alias separati da virgola" aria-label="Alias per {{ entry.term }}"></td>
   <td class="mode-cell">
-    <label class="switch labeled-switch" title="Modalità per {{ entry.term }}">
-      <input type="checkbox" name="mode_{{ entry.id }}" value="manual" {% if entry.mode == "manual" %}checked{% endif %} data-mode-switch aria-label="Modalità per {{ entry.term }}">
+    {% if job_locked %}
+      <input type="hidden" name="mode_{{ entry.id }}" value="{{ entry.mode }}">
+    {% endif %}
+    <label class="switch labeled-switch{% if job_locked %} is-disabled{% endif %}" title="{% if job_locked %}Modalità bloccata per il job corrente{% else %}Modalità per {{ entry.term }}{% endif %}">
+      <input type="checkbox" name="mode_{{ entry.id }}" value="manual" {% if entry.mode == "manual" %}checked{% endif %} {% if job_locked %}disabled{% endif %} data-mode-switch aria-label="Modalità per {{ entry.term }}">
       <span></span>
       <em data-mode-label>{% if entry.mode == "manual" %}Manuale{% else %}Automatico{% endif %}</em>
     </label>

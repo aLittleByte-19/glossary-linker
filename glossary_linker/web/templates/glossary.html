@@ -25,6 +25,11 @@
 
   <form method="post" class="stack" data-wizard-form>
     <input type="hidden" name="job_id" value="{{ job.id }}">
+    {% if job_locked %}
+      <section class="alert alert-warning">
+        <p>Il job corrente è già stato avviato. La rilevazione automatico/manuale delle voci è fissata nello snapshot di elaborazione: per modificarla devi chiudere questo job e rifare il processo dall'inizio.</p>
+      </section>
+    {% endif %}
     <section class="form-section guided-block glossary-review-panel">
       <div>
         <p class="section-kicker">Passo finale configurazione</p>
@@ -48,8 +53,8 @@
           <p class="muted">Controlla e modifica termini, definizioni, alias e modalità.</p>
         </div>
         <div class="actions">
-          <button type="button" data-refresh-glossary>Aggiorna dal .tex</button>
-          <a class="button-link button-accent" href="{{ url_for('entries', job_id=job.id, return_to='glossary') }}" target="_blank">Vista completa</a>
+          <button type="button" data-refresh-glossary {% if job_locked %}disabled title="Job già avviato: riavvia il processo per modificare la rilevazione"{% endif %}>Aggiorna dal .tex</button>
+          <a class="button-link button-accent" href="{{ url_for('entries', job_id=job.id, return_to='glossary') }}">Vista completa</a>
         </div>
       </div>
       <p id="glossary_preview_status" class="status-line" aria-live="polite"></p>
@@ -67,7 +72,7 @@
 
     <div class="flow-actions flow-actions-between">
       <a class="button-link button-back" href="{{ url_for('rules_step', job_id=job.id) }}">Indietro</a>
-      <button class="primary" name="action" value="continue" type="submit">Avvia elaborazione</button>
+      <button class="primary" name="action" value="continue" type="submit">{% if job_locked %}Torna al job corrente{% else %}Avvia elaborazione{% endif %}</button>
     </div>
   </form>
 </section>

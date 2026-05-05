@@ -12,7 +12,7 @@ import sys
 import re
 from urllib.request import urlopen
 
-from flask import Flask, Response, flash, has_request_context, jsonify, redirect, render_template, request, session, url_for
+from flask import Flask, Response, flash, has_request_context, jsonify, redirect, render_template, request, send_from_directory, session, url_for
 from markupsafe import Markup, escape
 
 from glossary_linker.core.compiler import compile_tex, test_environment
@@ -46,7 +46,12 @@ ROOT = Path.cwd()
 EDITORIAL_PATH = ROOT / "glossary-linker.yml"
 LOCAL_PATH = ROOT / "glossary-linker.local.yml"
 ENTRIES_PATH = ROOT / "glossary-linker.entries.yml"
-GUIDE_PATH = ROOT / "docs" / "USER_GUIDE.md"
+
+# La guida è parte del repository e deve essere cercata rispetto alla posizione del codice
+# e non rispetto alla cartella di lavoro corrente (CWD).
+APP_DIR = Path(__file__).resolve().parent.parent.parent
+GUIDE_PATH = APP_DIR / "docs" / "USER_GUIDE.md"
+
 JOBS_DIR = ROOT / ".glossary-linker" / "jobs"
 
 
@@ -93,14 +98,20 @@ def _get_or_create_wizard_job() -> dict:
     requested_job_id = request.values.get("job_id")
     job = _load_job(requested_job_id)
     if job:
-        if _refresh_job_from_store(job):
+        if not _job_has_started(job) and _refresh_job_from_store(job):
             _save_job(job)
-        session["wizard_job_id"] = job["id"]
+        if _job_has_started(job):
+            session.pop("wizard_job_id", None)
+        else:
+            session["wizard_job_id"] = job["id"]
         session["active_job_id"] = job["id"]
         return job
 
     job_id = session.get("wizard_job_id")
     job = _load_job(job_id)
+    if job and _job_has_started(job):
+        session.pop("wizard_job_id", None)
+        job = None
     if not job:
         job_id = uuid.uuid4().hex
         session["wizard_job_id"] = job_id
@@ -120,7 +131,15 @@ def _get_or_create_wizard_job() -> dict:
     return job
 
 
+def _job_has_started(job: dict | None) -> bool:
+    if not job:
+        return False
+    return bool(job.get("started") or job.get("occurrences") or job.get("results") or job.get("report"))
+
+
 def _refresh_job_from_store(job: dict) -> bool:
+    if _job_has_started(job):
+        return False
     changed = False
     stored_entries = _load_entries_store_safe()
     stored_payload = [asdict(entry) for entry in stored_entries]
@@ -152,6 +171,7 @@ def _normalize_job(job: dict) -> dict:
     job.setdefault("warnings", [])
     job.setdefault("review_order", "by_term")
     job.setdefault("occurrences", [])
+    job.setdefault("started", bool(job.get("occurrences") or job.get("results") or job.get("report")))
     if job["review_order"] not in {"by_term", "by_file"}:
         job["review_order"] = "by_term"
     if not isinstance(job.get("occurrences"), list):
@@ -183,7 +203,10 @@ def _resolve_related_job(job_id: str | None = None) -> dict | None:
     for candidate in (job_id, request.values.get("job_id"), session.get("wizard_job_id"), session.get("active_job_id")):
         job = _load_job(candidate)
         if job:
-            session["wizard_job_id"] = job["id"]
+            if _job_has_started(job):
+                session.pop("wizard_job_id", None)
+            else:
+                session["wizard_job_id"] = job["id"]
             session["active_job_id"] = job["id"]
             return job
     return None
@@ -304,11 +327,18 @@ def create_app() -> Flask:
         if not _can_open_wizard_step():
             return redirect(url_for("index"))
         job = _get_or_create_wizard_job()
+        job_locked = _job_has_started(job)
         config = _config_from_job(job)
         local = _load_local()
         entries = _entries_from_job(job)
 
         if request.method == "POST":
+            if job_locked:
+                flash("Il job è già stato avviato: la rilevazione automatico/manuale è fissata nello snapshot corrente. Per cambiarla, chiudi questo job e avvia un nuovo processo.", "warning")
+                if job.get("occurrences"):
+                    return redirect(url_for("review", job_id=job["id"], index=0))
+                return redirect(url_for("output", job_id=job["id"]))
+
             config.glossary_html_url = request.form.get("glossary_html_url", config.glossary_html_url)
             config.html_anchor_format = request.form.get("html_anchor_format", config.html_anchor_format)
             job["config"] = asdict(config)
@@ -331,6 +361,7 @@ def create_app() -> Flask:
             entries=entries,
             entries_path=ENTRIES_PATH,
             local_glossary_html_url=_local_glossary_html_url(local),
+            job_locked=job_locked,
         )
 
     @app.post("/api/decision/<job_id>")
@@ -352,22 +383,33 @@ def create_app() -> Flask:
             occurrences = _occurrences_from_job(job)
         except UserVisibleError as exc:
             return jsonify({"ok": False, "error": str(exc)}), 409
-        current = next((o for o in occurrences if o.id == occurrence_id), None)
+        current_index = _requested_occurrence_index(payload.get("occurrence_index"), len(occurrences))
+        current = occurrences[current_index] if current_index is not None and occurrences[current_index].id == occurrence_id else None
+        if current is None:
+            current_index = next((idx for idx, item in enumerate(occurrences) if item.id == occurrence_id), None)
+            current = occurrences[current_index] if current_index is not None else None
         if not current:
             return jsonify({"ok": False, "error": "Occurrence not found"}), 404
 
         affected = _apply_review_action(job, occurrences, current, value)
         _save_job(job)
-        current_index = next((idx for idx, item in enumerate(occurrences) if item.id == occurrence_id), 0)
-        next_index = min(current_index + 1, len(occurrences) - 1)
+        review_finished = current_index >= len(occurrences) - 1
+        next_index = current_index if review_finished else current_index + 1
+        message = "Scelta salvata."
+        if review_finished:
+            message = "Ultima occorrenza salvata: puoi andare al report finale."
+            flash("Hai raggiunto l'ultima occorrenza. Puoi andare al report finale.", "info")
         redirect_url = url_for("review", job_id=job_id, index=next_index)
         review_state = _review_state(occurrences, job["decisions"])
         return jsonify({
             "ok": True,
             "affected": affected,
+            "done": review_finished,
+            "message": message,
             "decisions": job["decisions"],
             "next_index": next_index,
             "redirect_url": redirect_url,
+            "output_url": url_for("output", job_id=job_id),
             "decided": review_state["decided"],
             "pending": review_state["pending"],
         })
@@ -448,6 +490,11 @@ def create_app() -> Flask:
             guide_path=GUIDE_PATH,
         )
 
+    @app.get("/help/static/<path:filename>")
+    def help_static(filename: str):
+        # Serve i file (immagini) dalla cartella docs per la guida
+        return send_from_directory(GUIDE_PATH.parent, filename)
+
     @app.get("/glossary-html")
     def glossary_html_page():
         config = _load_editorial()
@@ -502,7 +549,7 @@ def create_app() -> Flask:
             save_entries_store(entries, ENTRIES_PATH)
             _persist_glossary_html(config, local, entries)
             job = _load_job(payload.get("job_id") or session.get("wizard_job_id"))
-            if job:
+            if job and not _job_has_started(job):
                 job["entries"] = [asdict(entry) for entry in entries]
                 job["config"] = asdict(config)
                 _save_job(job)
@@ -555,13 +602,17 @@ def create_app() -> Flask:
         stored = _load_entries_store_safe()
         return_to = request.values.get("return_to", "")
         job = _resolve_related_job()
+        job_locked = _job_has_started(job)
         if request.method == "POST":
-            updated = _entries_from_form(stored)
+            updated = _entries_from_form(stored, lock_modes=job_locked)
             save_entries_store(updated, ENTRIES_PATH)
-            if job:
+            if job and not job_locked:
                 job["entries"] = [asdict(entry) for entry in updated]
                 _save_job(job)
-            flash("Glossario rilevato salvato in glossary-linker.entries.yml.", "success")
+            if job_locked:
+                flash("Glossario salvato per i prossimi processi. Il job corrente è già avviato: per modificare la rilevazione automatico/manuale devi chiuderlo e rifare il processo.", "warning")
+            else:
+                flash("Glossario rilevato salvato in glossary-linker.entries.yml.", "success")
             return_endpoint = _entries_return_endpoint(return_to)
             if job and return_endpoint != "entries":
                 return redirect(url_for(return_endpoint, job_id=job["id"]))
@@ -580,6 +631,7 @@ def create_app() -> Flask:
             job_id=job["id"] if job else "",
             return_to=return_to,
             wizard_return_url=wizard_return_url,
+            job_locked=job_locked,
         )
 
     @app.route("/format-glossary", methods=["GET", "POST"])
@@ -666,7 +718,10 @@ def create_app() -> Flask:
                 if action in _bulk_decision_actions():
                     flash(f"Scelte aggiornate: {affected} occorrenze.", "success")
                 else:
-                    index = min(len(occurrences) - 1, index + 1)
+                    if index + 1 < len(occurrences):
+                        index += 1
+                    else:
+                        flash("Hai raggiunto l'ultima occorrenza. Puoi andare al report finale.", "info")
             return redirect(url_for("review", job_id=job_id, index=index))
 
         occurrence = occurrences[index]
@@ -680,11 +735,17 @@ def create_app() -> Flask:
         same_term = [item for item in occurrences if item.entry_id == occurrence.entry_id]
         term_ids = list(dict.fromkeys(item.entry_id for item in occurrences))
         review_state = _review_state(occurrences, job["decisions"])
+        detected_label = occurrence.visible_text.strip() or occurrence.term
+        canonical_label = entry.term.strip() or occurrence.term
+        is_alias_match = detected_label.casefold() != canonical_label.casefold()
         return render_template(
             "review.html",
             job_id=job_id,
             occurrence=occurrence,
             entry=entry,
+            detected_label=detected_label,
+            canonical_label=canonical_label,
+            is_alias_match=is_alias_match,
             highlighted_context=_highlight_context(occurrence.context, occurrence.visible_text),
             index=index,
             total=len(occurrences),
@@ -1026,7 +1087,26 @@ def _render_markdown(text: str, headings: list[dict[str, str | int]] | None = No
             html.append(f"<li>{_inline_markdown(content)}</li>")
             continue
         close_list()
-        html.append(f"<p>{_inline_markdown(stripped)}</p>")
+        
+        # Gestione speciale per righe che contengono SOLO un'immagine (comune per gli screenshot)
+        image_match = re.match(r"^!\[([^\]]*)\]\(([^\)]+)\)$", stripped)
+        if image_match:
+            content = _inline_markdown(stripped)
+            html.append(Markup('<p class="doc-img-wrapper">') + content + Markup("</p>"))
+            continue
+
+        content = _inline_markdown(stripped)
+        
+        # Se il paragrafo precedente era un'immagine e questo è interamente corsivo, è una didascalia
+        is_caption = False
+        if html and 'class="doc-img-wrapper"' in str(html[-1]):
+            # Se stripped inizia con * o _ e finisce con lo stesso, ed è l'unica enfasi
+            if (stripped.startswith("*") and stripped.endswith("*")) or \
+               (stripped.startswith("_") and stripped.endswith("_")):
+                is_caption = True
+        
+        class_attr = ' class="doc-caption"' if is_caption else ""
+        html.append(Markup(f"<p{class_attr}>") + content + Markup("</p>"))
 
     if in_code:
         html.append(Markup('<pre tabindex="0"><code>') + escape("\n".join(code_lines)) + Markup("</code></pre>"))
@@ -1035,10 +1115,21 @@ def _render_markdown(text: str, headings: list[dict[str, str | int]] | None = No
 
 
 def _inline_markdown(text: str) -> Markup:
-    escaped = str(escape(text))
-    escaped = re.sub(r"`([^`]+)`", r"<code>\1</code>", escaped)
-    escaped = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", escaped)
-    return Markup(escaped)
+    # Usiamo Markup.escape per il testo base e poi sostituiamo i tag necessari
+    m = Markup.escape(text)
+    
+    # Immagini: ![alt](path) -> <img src="/docs/path" alt="alt">
+    m = re.sub(
+        r"!\[([^\]]*)\]\(([^\)]+)\)",
+        r'<img src="/help/static/\2" alt="\1" class="doc-img">',
+        m
+    )
+    m = re.sub(r"`([^`]+)`", r"<code>\1</code>", m)
+    m = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", m)
+    m = re.sub(r"\*([^*]+)\*", r"<em>\1</em>", m)
+    m = re.sub(r"_([^_]+)_", r"<em>\1</em>", m)
+    
+    return Markup(m)
 
 
 def _format_glossary_input(source_path: str, pasted_text: str, base: str | Path = ".") -> str:
@@ -1366,7 +1457,11 @@ def _lines_from_form(name: str, fallback: list[str]) -> list[str]:
     return [line.strip() for line in raw.splitlines() if line.strip()]
 
 
-def _entries_from_form(fallback: list[GlossaryEntry], included_ids: set[str] | None = None) -> list[GlossaryEntry]:
+def _entries_from_form(
+    fallback: list[GlossaryEntry],
+    included_ids: set[str] | None = None,
+    lock_modes: bool = False,
+) -> list[GlossaryEntry]:
     by_id = {entry.id: entry for entry in fallback}
     result: list[GlossaryEntry] = []
     for entry_id in request.form.getlist("entry_id"):
@@ -1378,7 +1473,7 @@ def _entries_from_form(fallback: list[GlossaryEntry], included_ids: set[str] | N
         aliases_raw = request.form.get(f"aliases_{entry_id}")
         aliases = base.aliases if aliases_raw is None else [item.strip() for item in aliases_raw.split(",") if item.strip()]
         mode_raw = request.form.get(f"mode_{entry_id}")
-        mode = base.mode if mode_raw is None else ("manual" if mode_raw == "manual" else "automatic")
+        mode = base.mode if lock_modes or mode_raw is None else ("manual" if mode_raw == "manual" else "automatic")
         result.append(GlossaryEntry(base.id, term, definition, aliases, mode))
     return result
 
@@ -1488,6 +1583,7 @@ def _start_job_processing(job: dict):
     job["decisions"] = {}
     job["results"] = []
     job["report"] = None
+    job["started"] = True
     
     _save_job(job)
     
@@ -1611,6 +1707,16 @@ def _decision_actions() -> set[str]:
 
 def _bulk_decision_actions() -> set[str]:
     return {"link_file_term", "skip_file_term", "link_term_all", "skip_term_all", "skip_file"}
+
+
+def _requested_occurrence_index(value: object, total: int) -> int | None:
+    try:
+        index = int(value)
+    except (TypeError, ValueError):
+        return None
+    if 0 <= index < total:
+        return index
+    return None
 
 
 def _review_state(occurrences: list[Occurrence], decisions: dict[str, bool]) -> dict[str, int]:

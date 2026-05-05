@@ -1228,7 +1228,7 @@ pre {
 }
 
 .alias-input {
-  min-width: 260px;
+  min-width: 0;
 }
 
 .definition-input {
@@ -1328,23 +1328,48 @@ pre {
 }
 
 .entries-table.compact {
-  min-width: 1040px;
+  min-width: 940px;
+  table-layout: fixed;
 }
 
 .entries-table.compact th:nth-child(1) {
-  width: 22%;
+  width: 21%;
 }
 
 .entries-table.compact th:nth-child(2) {
-  width: 38%;
+  width: 36%;
 }
 
 .entries-table.compact th:nth-child(3) {
-  width: 28%;
+  width: 26%;
 }
 
 .entries-table.compact th:nth-child(4) {
-  width: 12%;
+  width: 17%;
+}
+
+.entries-table.compact textarea,
+.entries-table.compact input:not([type="checkbox"]):not([type="hidden"]) {
+  width: 100%;
+  min-width: 0;
+}
+
+.mode-cell {
+  min-width: 150px;
+}
+
+.labeled-switch {
+  width: max-content;
+  max-width: 100%;
+}
+
+.labeled-switch em {
+  white-space: nowrap;
+}
+
+.labeled-switch.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
 }
 
 .entry-term-cell {
@@ -2014,6 +2039,22 @@ button:disabled {
   gap: 8px;
 }
 
+.review-term-focus {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 8px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.review-term-focus h2 {
+  font-size: clamp(1.35rem, 2.2vw, 1.7rem);
+}
+
+.review-term-focus .muted {
+  margin: 0;
+}
+
 .review-term h2,
 .review-position h2,
 .review-context-block h2,
@@ -2666,4 +2707,29 @@ button:disabled {
   border-color: var(--success) !important;
   color: white !important;
   pointer-events: none;
+}
+
+/* Documentation images */
+.doc-img-wrapper {
+  margin: 1.5rem 0 0;
+  text-align: center;
+}
+
+.doc-img {
+  display: inline-block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+/* Image captions in documentation */
+.doc-caption {
+  margin-top: 0.5rem;
+  margin-bottom: 1.5rem;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-style: italic;
 }

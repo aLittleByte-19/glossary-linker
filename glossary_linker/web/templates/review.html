@@ -44,6 +44,13 @@
     </section>
 
     <section class="review-term">
+      <div class="review-term-focus">
+        <p class="eyebrow">{% if is_alias_match %}Alias rilevato{% else %}Termine rilevato{% endif %}</p>
+        <h2>{{ detected_label }}</h2>
+        {% if is_alias_match %}
+          <p class="muted">Voce del glossario: <strong>{{ canonical_label }}</strong></p>
+        {% endif %}
+      </div>
       <h2>Definizione dal glossario</h2>
       <p>{{ entry.definition or "Nessuna definizione disponibile nel glossario." }}</p>
     </section>
@@ -114,7 +121,7 @@
           <p class="muted">Questa scelta vale solo per la parola evidenziata nel contesto.</p>
           <p class="review-save-status" data-review-status aria-live="polite"></p>
         </div>
-        <div class="decision-grid primary-decisions" data-occurrence-id="{{ occurrence.id }}">
+        <div class="decision-grid primary-decisions" data-occurrence-id="{{ occurrence.id }}" data-current-index="{{ index }}">
           <button class="danger-primary" name="action" value="skip" type="submit" data-ajax-decision>Salta</button>
           <button class="success-primary" name="action" value="link" type="submit" data-ajax-decision>Collega</button>
         </div>

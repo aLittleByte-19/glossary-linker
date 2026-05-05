@@ -36,6 +36,11 @@
     {% if return_to %}
       <input type="hidden" name="return_to" value="{{ return_to }}">
     {% endif %}
+    {% if job_locked %}
+      <section class="alert alert-warning">
+        <p>Il job corrente è già stato avviato. Puoi correggere testo, definizioni e alias per i prossimi processi, ma la rilevazione automatico/manuale non può cambiare nello snapshot corrente: chiudi il job e rifai il processo per modificarla.</p>
+      </section>
+    {% endif %}
     <div class="entries-toolbar">
       <div class="stats compact-stats">
         <div><strong>{{ entries | length }}</strong><span>Termini</span></div>

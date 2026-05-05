@@ -1,184 +1,90 @@
 # Glossary Linker - Guida utente
 
-Glossary Linker e un'app locale per aggiungere rimandi al glossario dentro documenti LaTeX. Non modifica i sorgenti appena avvii un'elaborazione: prima prepara risultati intermedi, poi sei tu a scegliere cosa salvare.
+Glossary Linker serve a collegare documenti LaTeX a un glossario HTML, mantenendo controllo editoriale sulle occorrenze ambigue. L'app lavora in locale, salva lo stato del job su disco e non modifica i sorgenti finche non scegli esplicitamente cosa salvare nella schermata finale.
 
-## Concetti base
+![Home dell'applicazione](screenshots/01-operazione.png)
+*La schermata iniziale permette di scegliere l'operazione da eseguire e mostra lo stato attuale del progetto.*
 
-- Glossario: file `.tex` che contiene le voci da linkare.
-- Voce: termine del glossario, con ID stabile, termine visibile e definizione.
-- Automatico: il termine viene linkato in tutte le occorrenze valide.
-- Manuale: ogni occorrenza viene mostrata nella revisione manuale.
-- File `.linked.tex`: copia non distruttiva del documento originale con i link inseriti.
-- Macro `\glslink{id}{testo}`: macro inserita nei documenti per creare un link leggibile verso l'HTML del glossario generato dal tool.
+## Prima configurazione
 
-## Flusso consigliato
+Apri le impostazioni dall'icona in alto a destra e controlla l'ambiente locale: root del progetto, porta del server, path di `latexmk`, `pdflatex`, `xelatex` e `lualatex`. La sezione `Verifica ambiente` ti dice se i binari configurati sono raggiungibili.
 
-- Prepara il glossario se non ha ancora ID stabili.
-- Controlla le impostazioni ambiente.
-- Controlla le regole editoriali.
-- Linka i documenti.
-- Rivedi le occorrenze manuali.
-- Salva i file prodotti.
+Le impostazioni personali restano in `glossary-linker.local.yml`. Le regole editoriali condivise stanno invece in `glossary-linker.yml`: pattern di file esclusi, ambienti LaTeX ignorati, comandi da non analizzare e blocchi come indice, frontespizio o titoli.
 
-## Primo avvio
-
-1. Apri le impostazioni dall'icona in alto a destra.
-2. In `Ambiente locale`, controlla la root repo predefinita.
-3. Controlla i path di `latexmk`, `pdflatex`, `xelatex` e `lualatex`.
-4. Apri `Verifica ambiente`.
-5. Se uno strumento risulta `not found`, torna in `Ambiente locale` e scegli il binario corretto.
-6. Apri `Regole editoriali` e controlla cosa viene escluso dal linker.
-
-Se non sai quale compilatore scegliere, lascia `latexmk`: di solito gestisce meglio piu passaggi, riferimenti e indice.
+Se non sai quale compilatore scegliere, lascia `latexmk`.
 
 ## Preparare il glossario
 
-Apri `Formatta glossario .tex` dalla home.
+Usa `Formatta glossario .tex` quando il glossario sorgente deve essere letto e trasformato in una lista di voci con ID stabili. Puoi selezionare un file locale oppure incollare il contenuto LaTeX.
 
-Puoi scegliere un file locale oppure incollare direttamente il contenuto LaTeX. Il sorgente non viene sovrascritto: l'app genera l'HTML del glossario.
+Il rilevamento puo essere automatico, basato su `\subsection{Termine}` oppure su un comando specifico nel formato `\comando{Termine}`. Dopo il rilevamento controlla le voci: escludi i falsi positivi, correggi le definizioni e aggiungi alias separati da virgola.
 
-Il rilevamento operativo puo essere:
+![Rilevamento voci del glossario](screenshots/03-glossario-voci.png)
+*Revisione delle voci rilevate: è possibile impostare alias, definizioni e la modalità di collegamento (automatica o manuale).*
 
-- Auto: prova a riconoscere il comando LaTeX che genera la lista piu lunga e coerente di voci.
-- Sezioni: legge `\subsection{Termine}`.
-- Comando specifico: legge un comando indicato dall'utente nel formato `\comando{Termine}`.
+Alla fine il tool salva il glossario HTML. Ogni voce ha un anchor `gls-id`, usato dai link inseriti nei documenti.
 
-Premi `Rileva voci`. Controlla la tabella delle voci rilevate:
-
-- lascia selezionate le voci reali;
-- togli la spunta alle righe rilevate per errore;
-- correggi la definizione se serve;
-- aggiungi alias separati da virgola.
-
-Alla fine scegli dove salvare l'HTML generato. Lo stesso path resta salvato nelle impostazioni e viene usato da `/glossary-html`.
-
-Quando una voce viene rilevata per errore, togli la spunta `Incluso`. Questo evita che finisca nella lista usata dal linker. Se una definizione e sbagliata o troppo sporca, correggila nel campo della tabella prima di salvare.
-
-Esempio con sezioni:
+Esempio minimo:
 
 ```tex
-\subsection{Termine visibile}
-Definizione della voce.
+\subsection{Accuratezza}
+Metrica che misura quanto una previsione e corretta.
 ```
-
-L'ID viene generato dal termine rilevato. Se cambi il termine, cambiano anche gli anchor usati dai link nei documenti. L'HTML generato dal tool crea una sezione con `id="gls-id"` per ogni voce rilevata.
 
 ## Linkare documenti
 
-Apri `Linka documenti`.
+L'operazione `Linka documenti` guida il processo in piu step: scelta dei file, regole, glossario, revisione manuale e output. Puoi selezionare singoli `.tex` oppure scansionare una cartella dentro la root del progetto.
 
-Nella pagina `Glossario e documenti` parti dalla revisione del glossario:
+![Selezione dei documenti](screenshots/02-documenti.png)
+*Step di selezione dei file .tex da processare e scelta dell'ordine di revisione.*
 
-- URL usato nei documenti per aprire il glossario HTML.
-- definizioni, alias e modalità Automatico/Manuale delle voci rilevate.
+Nel passo Glossario controlli l'URL usato dai documenti, le definizioni, gli alias e la modalita delle voci. Le voci automatiche vengono linkate nelle occorrenze valide; le voci manuali entrano nella revisione occorrenza per occorrenza.
 
-Il parsing `.tex -> .html` e obbligatorio: quando aggiorni le voci o avvii
-l'elaborazione, il tool parsa il glossario, salva la lista locale delle entry e
-genera l'HTML con una sezione per ogni voce. I link inseriti nei documenti
-puntano sempre a `URL#gls-id`.
+Quando un job e gia partito, la rilevazione automatico/manuale resta bloccata nello snapshot corrente. Puoi correggere il glossario per i processi futuri, ma per cambiare quelle modalita nel job in corso devi chiuderlo e ripartire.
 
-Per lavorare in locale lascia `http://127.0.0.1:8765/glossary-html`: il link
-apre la pagina HTML servita dall'app mentre il server e in esecuzione. Per Pages
-usa l'URL remoto dello stesso HTML generato dal tool, per esempio
-`https://nome-org.github.io/.../Glossario.html`.
+Per lavorare in locale lascia:
 
-Seleziona i documenti manualmente o scansiona una cartella. I file dentro la root vengono mostrati come path relativi.
+```text
+http://127.0.0.1:8765/glossary-html
+```
 
-Quando usare `Linka documenti`:
-
-- vuoi processare uno o pochi file scelti a mano;
-- vuoi controllare un documento specifico;
-- vuoi generare copie `.linked.tex` senza toccare gli originali.
-
-Quando usare `Aggiorna per nuove voci glossario`:
-
-- hai aggiunto nuove voci al glossario;
-- vuoi scansionare la documentazione esistente;
-- vuoi applicare solo alcuni ID nuovi.
+Per la pubblicazione usa invece l'URL remoto dello stesso file HTML generato, mantenendo l'anchor `#gls-id`.
 
 ## Revisione manuale
 
-Le voci in modalita Manuale aprono una schermata occorrenza per occorrenza. Per ogni occorrenza vedi:
+La revisione mostra una occorrenza alla volta: termine o alias rilevato, definizione dal glossario, file, riga, sezione e contesto con parola evidenziata.
 
-- termine;
-- definizione;
-- file;
-- riga;
-- sezione;
-- contesto con parola evidenziata.
+![Processo di revisione manuale](screenshots/04-revisione.png)
+*Controllo editoriale delle occorrenze: il contesto permette di decidere se collegare o saltare il termine.*
 
-Puoi linkare o saltare la singola occorrenza, oppure applicare scelte piu ampie al file o al termine.
+`Collega` e `Salta` salvano la scelta e avanzano all'occorrenza successiva nell'ordine di revisione. `Prossima da decidere` salta alle occorrenze ancora senza scelta. Le azioni estese applicano la stessa decisione al termine corrente, al file corrente o a tutte le occorrenze compatibili.
 
-## Output
+Quando arrivi all'ultima occorrenza, l'app salva la scelta e suggerisce di passare al report finale.
 
-Nella schermata finale puoi salvare tutti i file:
+## Output e salvataggio
 
-- come `.linked.tex`;
-- sovrascrivendo i `.tex` originali.
+La schermata finale genera i risultati e il report. Il salvataggio standard produce file `.linked.tex`, utili per controllare il risultato senza toccare gli originali. La sovrascrittura dei sorgenti e disponibile solo come scelta esplicita nella schermata finale.
 
-Il report e opzionale. Puoi generarlo in Markdown o JSON.
+![Report finale e opzioni di salvataggio](screenshots/05-output.png)
+*Schermata di output con statistiche di elaborazione e pulsanti per il salvataggio dei file e del report.*
 
-Usa `.linked.tex` quando vuoi controllare il risultato prima di sostituire il documento. Usa la sovrascrittura solo quando hai gia verificato che i link inseriti sono corretti.
+Il report puo essere salvato in Markdown o JSON. Serve soprattutto per tracciare file processati, link automatici, link approvati manualmente, occorrenze saltate, warning ed errori.
 
-## Impostazioni
+## Glossario HTML
 
-La sezione `Ambiente locale` contiene solo impostazioni del tuo computer:
+Il glossario HTML generato e pensato per essere visitabile anche da persone che non usano il tool. Mostra il brand, una ricerca rapida, un indice alfabetico e le voci con definizione e alias. Gli ID tecnici restano negli anchor, ma non sono mostrati direttamente nella pagina.
 
-- root repo predefinita;
-- binari LaTeX;
-- compilatore preferito;
-- timeout;
-- cartella temporanea;
-- pulizia dei file temporanei di compilazione;
-- porta locale;
-- browser preferito.
+![Esempio di glossario HTML pubblico](screenshots/06-glossario-html.png)
+*Il glossario finale navigabile, con ricerca e navigazione alfabetica.*
 
-La sezione `Regole editoriali` contiene le regole condivise:
-
-- pattern file esclusi;
-- ambienti LaTeX ignorati;
-- comandi ignorati;
-- frontespizio, indice, titoli e didascalie.
-
-La sezione `Verifica ambiente` controlla se i binari configurati sono raggiungibili.
-
-## Pulizia artifact LaTeX
-
-Per eliminare gli artifact di compilazione LaTeX in una directory:
-
-```bash
-scripts/clean_latex_artifacts.py .
-```
-
-## Note importanti
-
-- L'app non installa TeX Live o MiKTeX.
-- L'app non corregge asset mancanti nei documenti.
-- L'app non garantisce correttezza semantica automatica: usa la revisione manuale per termini ambigui.
-- I link al glossario puntano all'HTML generato dal tool. Assicurati che l'URL configurato sia raggiungibile e che l'HTML sia stato rigenerato dopo ogni modifica al glossario `.tex`.
-- Prima di sovrascrivere sorgenti importanti, controlla sempre i risultati.
+Dopo ogni modifica importante al glossario `.tex`, rigenera l'HTML prima di pubblicarlo o usarlo nei documenti finali.
 
 ## Problemi comuni
 
-### Il glossario rileva una voce strana
+Se il glossario rileva voci sbagliate, cambia metodo di parsing o indica il comando LaTeX corretto. Se la voce e comunque un falso positivo, escludila prima del salvataggio.
 
-Apri `Formatta glossario .tex`, prova il metodo `subsection` o indica il comando specifico che contiene il termine. Se la voce compare ancora, togli la spunta `Incluso` prima del salvataggio.
+Se la compilazione PDF fallisce, controlla il log: di solito il problema e un binario LaTeX non trovato, un pacchetto mancante, un asset assente o un documento che compila solo dalla root originale.
 
-### La compilazione PDF fallisce
+Se un link apre il glossario ma non arriva alla voce giusta, rigenera l'HTML e verifica che esista l'elemento `id="gls-id"` della voce interessata. In locale tieni il server aperto su `http://127.0.0.1:8765`; in remoto assicurati che il file pubblicato sia aggiornato.
 
-Controlla il log mostrato dall'app. Gli errori piu comuni sono:
-
-- binario LaTeX non trovato;
-- pacchetto LaTeX mancante;
-- immagine o file incluso non presente;
-- documento che compila solo dalla root del progetto originale.
-
-Glossary Linker mostra il log, ma non modifica asset o path del progetto.
-
-### Il link apre il glossario ma non arriva alla voce giusta
-
-Rigenera le voci dal glossario `.tex` e controlla che l'HTML contenga un elemento con `id="gls-id"` per la voce interessata. In locale verifica che l'app sia aperta su `http://127.0.0.1:8765`; in remoto verifica che l'HTML pubblicato su Pages sia aggiornato.
-
-### Non so se un termine deve essere automatico o manuale
-
-Usa `Manuale` per parole corte, comuni o ambigue. Usa `Automatico` per termini tecnici chiari e poco ambigui.
+Se non sai se una voce deve essere automatica o manuale, usa Manuale per parole corte, comuni o ambigue. Usa Automatico per termini tecnici chiari e poco ambigui.

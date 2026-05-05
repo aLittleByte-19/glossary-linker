@@ -831,6 +831,7 @@ function initReviewDecisionAjax() {
   const grid = form?.querySelector(".primary-decisions");
   const status = form?.querySelector("[data-review-status]");
   const occurrenceId = grid?.dataset.occurrenceId;
+  const currentIndex = Number.parseInt(grid?.dataset.currentIndex || "", 10);
   const apiUrl = form?.dataset.reviewApi;
   if (!form || !grid || !occurrenceId || !apiUrl) return;
 
@@ -847,7 +848,11 @@ function initReviewDecisionAjax() {
         const response = await fetch(apiUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ occurrence_id: occurrenceId, value })
+          body: JSON.stringify({
+            occurrence_id: occurrenceId,
+            occurrence_index: Number.isFinite(currentIndex) ? currentIndex : null,
+            value
+          })
         });
         const data = await response.json().catch(() => ({}));
         if (!response.ok || !data.ok) {
@@ -856,7 +861,7 @@ function initReviewDecisionAjax() {
         button.classList.remove("loading");
         button.classList.add("saved");
         button.textContent = "Salvato!";
-        if (status) status.textContent = "Salvato!";
+        if (status) status.textContent = data.message || "Salvato!";
         window.setTimeout(() => {
           window.location.assign(data.redirect_url || form.action);
         }, 260);
