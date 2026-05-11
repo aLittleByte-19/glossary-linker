@@ -55,7 +55,7 @@ Il cuore del tool è la revisione manuale: per ogni termine ambiguo o marcato co
 ### Glossario HTML
 I link inseriti puntano a un glossario HTML moderno, ricercabile e pronto per la pubblicazione.
 
-![Glossario HTML generato](docs/screenshots/06-glossary-html.png)
+![Glossario HTML generato](docs/screenshots/06-glossario-html.png)
 *Il glossario HTML finale con ricerca e navigazione rapida.*
 
 ## Configurazione
