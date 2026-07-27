@@ -32,7 +32,7 @@
         <input type="radio" name="operation" value="link-documents" {% if selected_operation == "link-documents" %}checked{% endif %}>
         <span>
           <strong>Linka documenti</strong>
-          <small>Per generare copie <code>.linked.tex</code> con link HTTP verso il glossario HTML e rivedere solo i termini manuali.</small>
+          <small>Per generare copie <code>.linked.tex</code> con link HTTP verso la pagina pubblica del glossario e rivedere solo i termini manuali.</small>
         </span>
       </label>
       <label class="operation-card">
@@ -45,8 +45,8 @@
       <label class="operation-card">
         <input type="radio" name="operation" value="format-glossary" {% if selected_operation == "format-glossary" %}checked{% endif %}>
         <span>
-          <strong>Formatta glossario .tex</strong>
-          <small>Per partire da sezioni LaTeX, confermare le voci rilevate e salvare un glossario con ID stabili.</small>
+          <strong>Esporta glossario JSON</strong>
+          <small>Per leggere le sezioni LaTeX, revisionare le voci rilevate e salvare il JSON con ID stabili.</small>
         </span>
       </label>
       <div class="home-actions">
@@ -60,7 +60,7 @@
     <div class="home-intro">
       <p class="eyebrow">Wizard locale per LaTeX</p>
       <h1>Collega i termini al glossario senza perdere il controllo editoriale.</h1>
-      <p>Glossary Linker prepara link HTTP verso il glossario HTML, evita le zone delicate del sorgente e ti chiede una decisione solo per i termini segnati come manuali.</p>
+      <p>Glossary Linker prepara link HTTP verso la pagina pubblica del glossario, evita le zone delicate del sorgente e ti chiede una decisione solo per i termini segnati come manuali.</p>
       <div class="home-quick-actions" aria-label="Azioni rapide">
         <a class="button-link primary-link" href="{{ url_for('help_page') }}">Leggi la guida</a>
         <a class="button-link" href="{{ url_for('settings') }}">Controlla impostazioni</a>
@@ -85,8 +85,8 @@
           <dd><span class="status-dot {% if home_status.glossary_ok %}ok{% else %}warn{% endif %}"></span><code title="{{ home_status.glossary_label }}">{{ home_status.glossary_label }}</code></dd>
         </div>
         <div>
-          <dt>Glossario HTML</dt>
-          <dd><span class="status-dot {% if home_status.glossary_html_ok %}ok{% else %}warn{% endif %}"></span><code title="{{ home_status.glossary_html_label }}">{{ home_status.glossary_html_label }}</code></dd>
+          <dt>Output JSON</dt>
+          <dd><span class="status-dot {% if home_status.glossary_json_ok %}ok{% else %}warn{% endif %}"></span><code title="{{ home_status.glossary_json_label }}">{{ home_status.glossary_json_label }}</code></dd>
         </div>
       </dl>
       <div class="setup-metrics">

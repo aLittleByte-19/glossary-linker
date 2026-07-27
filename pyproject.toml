@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "glossary-linker"
 version = "0.1.0"
-description = "Local wizard to link LaTeX documents to a published glossary PDF."
+description = "Local wizard to export glossary JSON and link LaTeX documents to its public page."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"

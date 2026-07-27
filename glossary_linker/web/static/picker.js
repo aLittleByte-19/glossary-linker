@@ -79,7 +79,7 @@ async function refreshGlossaryEntries({ forced = false } = {}) {
     ["job_id", "input[name='job_id']"],
     ["glossary_path", "#glossary_path"],
     ["glossary_html_url", "#glossary_html_url"],
-    ["glossary_html_path", "[name='glossary_html_path']"],
+    ["glossary_json_path", "[name='glossary_json_path']"],
     ["html_anchor_format", "#html_anchor_format"],
     ["glossary_custom_command", "[name='glossary_custom_command']"],
     ["glossary_structure_description", "[name='glossary_structure_description']"]
@@ -155,7 +155,7 @@ async function saveWizardState() {
     ["repo_root", "#repo_root"],
     ["glossary_path", "#glossary_path"],
     ["glossary_html_url", "#glossary_html_url"],
-    ["glossary_html_path", "[name='glossary_html_path']"],
+    ["glossary_json_path", "[name='glossary_json_path']"],
     ["html_anchor_format", "#html_anchor_format"],
     ["glossary_custom_command", "[name='glossary_custom_command']"],
     ["glossary_structure_description", "[name='glossary_structure_description']"],

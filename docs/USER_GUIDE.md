@@ -1,90 +1,113 @@
 # Glossary Linker - Guida utente
 
-Glossary Linker serve a collegare documenti LaTeX a un glossario HTML, mantenendo controllo editoriale sulle occorrenze ambigue. L'app lavora in locale, salva lo stato del job su disco e non modifica i sorgenti finche non scegli esplicitamente cosa salvare nella schermata finale.
-
-![Home dell'applicazione](screenshots/01-operazione.png)
-*La schermata iniziale permette di scegliere l'operazione da eseguire e mostra lo stato attuale del progetto.*
+Glossary Linker collega documenti LaTeX alla pagina pubblica del glossario, mantenendo controllo editoriale sulle occorrenze ambigue. L'app lavora in locale, esporta un unico JSON per l'app Angular di Documentazione, salva lo stato del job su disco e non modifica i sorgenti finché non scegli esplicitamente cosa salvare nella schermata finale.
 
 ## Prima configurazione
 
-Apri le impostazioni dall'icona in alto a destra e controlla l'ambiente locale: root del progetto, porta del server, path di `latexmk`, `pdflatex`, `xelatex` e `lualatex`. La sezione `Verifica ambiente` ti dice se i binari configurati sono raggiungibili.
+Apri le impostazioni dall'icona in alto a destra e controlla ambiente locale, root del progetto, porta del server e strumenti LaTeX. Le impostazioni personali restano in `glossary-linker.local.yml`, inclusi:
 
-Le impostazioni personali restano in `glossary-linker.local.yml`. Le regole editoriali condivise stanno invece in `glossary-linker.yml`: pattern di file esclusi, ambienti LaTeX ignorati, comandi da non analizzare e blocchi come indice, frontespizio o titoli.
+- `glossary_path`, il sorgente LaTeX;
+- `glossary_json_path`, il file JSON del glossario generato.
 
-Se non sai quale compilatore scegliere, lascia `latexmk`.
+Le regole editoriali condivise e l'URL pubblico stanno in `glossary-linker.yml`. Le voci rilevate e revisionate sono salvate nello stato locale `.glossary-linker/entries.yml`; nessuno di questi file locali viene tracciato da Git.
 
-## Preparare il glossario
+## Preparare ed esportare il glossario
 
-Usa `Formatta glossario .tex` quando il glossario sorgente deve essere letto e trasformato in una lista di voci con ID stabili. Puoi selezionare un file locale oppure incollare il contenuto LaTeX.
+1. Dalla home seleziona `Esporta glossario JSON` e premi `Continua`.
+2. Nel passo `Input glossario` indica il file `.tex` e il file JSON da generare. Se incolli anche del contenuto LaTeX, il testo incollato ha la precedenza sul file.
+3. Nel passo `Rilevamento entry` scegli `Auto`, `\subsection{Termine}` oppure un comando specifico nel formato `\comando{Termine}`, quindi premi `Rileva voci`.
+4. Nel passo `Revisione voci rilevate` escludi i falsi positivi, correggi le definizioni e aggiungi gli alias separati da virgola.
+5. Controlla ancora il percorso mostrato nel passo `Esportazione JSON` e premi `Salva JSON revisionato`.
 
-Il rilevamento puo essere automatico, basato su `\subsection{Termine}` oppure su un comando specifico nel formato `\comando{Termine}`. Dopo il rilevamento controlla le voci: escludi i falsi positivi, correggi le definizioni e aggiungi alias separati da virgola.
+Il salvataggio applica inclusioni, definizioni e alias presenti nel form, aggiorna lo stato locale delle voci e scrive atomicamente il JSON nel percorso indicato. Il sorgente `.tex` non viene modificato. Ogni voce conserva l'ID corrente; Documentazione costruisce il relativo anchor pubblico aggiungendo il prefisso `gls-`.
 
-![Rilevamento voci del glossario](screenshots/03-glossario-voci.png)
-*Revisione delle voci rilevate: è possibile impostare alias, definizioni e la modalità di collegamento (automatica o manuale).*
+`Scarica JSON dal sorgente` non equivale al salvataggio revisionato: rilegge il `.tex` configurato e scarica la conversione diretta, senza inviare eventuali modifiche del form non ancora salvate. Usalo soltanto quando vuoi il contenuto derivato direttamente dal sorgente; per il JSON editoriale definitivo usa `Salva JSON revisionato`.
 
-Alla fine il tool salva il glossario HTML. Ogni voce ha un anchor `gls-id`, usato dai link inseriti nei documenti.
+Frammento reale prodotto dal glossario di Documentazione:
+
+```json
+{
+  "id": "soglia-di-confidenza",
+  "term": "Soglia di Confidenza",
+  "definition": "Valore limite per l'intervento manuale (es. 80%).",
+  "aliases": []
+}
+```
+
+Le versioni precedenti salvavano le voci in `glossary-linker.entries.yml`: al primo avvio il tool importa automaticamente quel file nel nuovo stato locale, se presente.
 
 Esempio minimo:
 
 ```tex
 \subsection{Accuratezza}
-Metrica che misura quanto una previsione e corretta.
+Metrica che misura quanto una previsione è corretta.
 ```
 
 ## Linkare documenti
 
-L'operazione `Linka documenti` guida il processo in piu step: scelta dei file, regole, glossario, revisione manuale e output. Puoi selezionare singoli `.tex` oppure scansionare una cartella dentro la root del progetto.
+L'operazione `Linka documenti` guida il processo in più step: scelta dei file, regole, glossario, revisione manuale e output. Puoi selezionare singoli `.tex` oppure scansionare una cartella dentro la root del progetto.
 
 ![Selezione dei documenti](screenshots/02-documenti.png)
-*Step di selezione dei file .tex da processare e scelta dell'ordine di revisione.*
 
-Nel passo Glossario controlli l'URL usato dai documenti, le definizioni, gli alias e la modalita delle voci. Le voci automatiche vengono linkate nelle occorrenze valide; le voci manuali entrano nella revisione occorrenza per occorrenza.
+Nel passo Glossario controlli l'URL pubblico, le definizioni, gli alias e la modalità delle voci. Le voci automatiche vengono linkate nelle occorrenze valide; le voci manuali entrano nella revisione occorrenza per occorrenza.
 
-Quando un job e gia partito, la rilevazione automatico/manuale resta bloccata nello snapshot corrente. Puoi correggere il glossario per i processi futuri, ma per cambiare quelle modalita nel job in corso devi chiuderlo e ripartire.
-
-Per lavorare in locale lascia:
+Configura l'URL pubblico:
 
 ```text
-http://127.0.0.1:8765/glossary-html
+https://alittlebyte-19.github.io/Documentazione/glossario.html
 ```
 
-Per la pubblicazione usa invece l'URL remoto dello stesso file HTML generato, mantenendo l'anchor `#gls-id`.
+I link prodotti hanno la forma `https://alittlebyte-19.github.io/Documentazione/glossario.html#gls-id`. L'URL non viene copiato nel JSON.
+
+Quando un job è già partito, la rilevazione automatico/manuale resta bloccata nello snapshot corrente. Puoi correggere il glossario per i processi futuri, ma per cambiare quelle modalità nel job in corso devi chiuderlo e ripartire.
 
 ## Revisione manuale
 
-La revisione mostra una occorrenza alla volta: termine o alias rilevato, definizione dal glossario, file, riga, sezione e contesto con parola evidenziata.
+La revisione mostra una occorrenza alla volta: termine o alias rilevato, definizione, file, riga, sezione e contesto con parola evidenziata.
 
 ![Processo di revisione manuale](screenshots/04-revisione.png)
-*Controllo editoriale delle occorrenze: il contesto permette di decidere se collegare o saltare il termine.*
 
-`Collega` e `Salta` salvano la scelta e avanzano all'occorrenza successiva nell'ordine di revisione. `Prossima da decidere` salta alle occorrenze ancora senza scelta. Le azioni estese applicano la stessa decisione al termine corrente, al file corrente o a tutte le occorrenze compatibili.
+`Collega` e `Salta` salvano la scelta e avanzano all'occorrenza successiva. Le azioni estese applicano la stessa decisione al termine corrente, al file corrente o a tutte le occorrenze compatibili.
 
-Quando arrivi all'ultima occorrenza, l'app salva la scelta e suggerisce di passare al report finale.
+## Output dei documenti
 
-## Output e salvataggio
-
-La schermata finale genera i risultati e il report. Il salvataggio standard produce file `.linked.tex`, utili per controllare il risultato senza toccare gli originali. La sovrascrittura dei sorgenti e disponibile solo come scelta esplicita nella schermata finale.
+La schermata finale genera i documenti elaborati e il report. Il salvataggio standard produce file `.linked.tex`, utili per controllare il risultato senza toccare gli originali. La sovrascrittura dei sorgenti è disponibile solo come scelta esplicita.
 
 ![Report finale e opzioni di salvataggio](screenshots/05-output.png)
-*Schermata di output con statistiche di elaborazione e pulsanti per il salvataggio dei file e del report.*
 
-Il report puo essere salvato in Markdown o JSON. Serve soprattutto per tracciare file processati, link automatici, link approvati manualmente, occorrenze saltate, warning ed errori.
+Il report può essere salvato in Markdown o JSON. Non è il JSON del glossario: descrive soltanto l'esecuzione sui documenti.
 
-## Glossario HTML
+## Contratto JSON
 
-Il glossario HTML generato e pensato per essere visitabile anche da persone che non usano il tool. Mostra il brand, una ricerca rapida, un indice alfabetico e le voci con definizione e alias. Gli ID tecnici restano negli anchor, ma non sono mostrati direttamente nella pagina.
+Il file del glossario contiene soltanto `title` ed `entries`; ogni voce contiene soltanto `id`, `term`, `definition` e `aliases`. L'output è UTF-8, deterministico, leggibile e termina con newline.
 
-![Esempio di glossario HTML pubblico](screenshots/06-glossario-html.png)
-*Il glossario finale navigabile, con ricerca e navigazione alfabetica.*
+Termini e definizioni vuoti, ID non validi o duplicati, termini duplicati e markup HTML interrompono l'esportazione senza lasciare file parziali. Gli alias vengono ripuliti e deduplicati.
 
-Dopo ogni modifica importante al glossario `.tex`, rigenera l'HTML prima di pubblicarlo o usarlo nei documenti finali.
+Imposta il percorso direttamente destinabile a Documentazione:
+
+```yaml
+glossary_json_path: /percorso/Documentazione/.github/site-src/glossary.json
+```
+
+La CLI genera direttamente il file senza aprire l'interfaccia:
+
+```bash
+.venv/bin/glossary-linker-cli \
+  --config glossary-linker.yml \
+  --glossary /percorso/Glossario.tex \
+  --glossary-json /percorso/glossary.json
+```
+
+Se `glossary_json_path` punta a `.github/site-src/glossary.json`, Glossary Linker aggiorna quel file nel repository Documentazione ma non costruisce né pubblica l'app Angular. Dopo l'esportazione controlla la modifica, esegui il normale build o l'anteprima di Documentazione e pubblica il sito con il relativo flusso di rilascio.
+
+Le vecchie configurazioni `glossary_html_path` vengono migrate automaticamente allo stesso nome con estensione `.json`, con un messaggio di deprecazione. Il tool non mantiene route o renderer HTML.
 
 ## Problemi comuni
 
-Se il glossario rileva voci sbagliate, cambia metodo di parsing o indica il comando LaTeX corretto. Se la voce e comunque un falso positivo, escludila prima del salvataggio.
+Se il glossario rileva voci sbagliate, cambia metodo di parsing o indica il comando LaTeX corretto. Se una voce è comunque un falso positivo, escludila prima del salvataggio.
 
-Se la compilazione PDF fallisce, controlla il log: di solito il problema e un binario LaTeX non trovato, un pacchetto mancante, un asset assente o un documento che compila solo dalla root originale.
+Se la compilazione PDF fallisce, controlla il log: di solito il problema è un binario LaTeX non trovato, un pacchetto mancante, un asset assente o un documento che compila solo dalla root originale.
 
-Se un link apre il glossario ma non arriva alla voce giusta, rigenera l'HTML e verifica che esista l'elemento `id="gls-id"` della voce interessata. In locale tieni il server aperto su `http://127.0.0.1:8765`; in remoto assicurati che il file pubblicato sia aggiornato.
+Se un link apre il glossario ma non arriva alla voce giusta, verifica che il JSON pubblicato contenga l'ID atteso e che l'app Angular esponga l'elemento `id="gls-id"`. Rigenera il JSON e ricostruisci Documentazione.
 
 Se non sai se una voce deve essere automatica o manuale, usa Manuale per parole corte, comuni o ambigue. Usa Automatico per termini tecnici chiari e poco ambigui.

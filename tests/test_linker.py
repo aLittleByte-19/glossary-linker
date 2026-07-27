@@ -16,30 +16,30 @@ Accuratezza e accuratezza.
 """,
         encoding="utf-8",
     )
-    config = EditorialConfig(glossary_html_url="http://127.0.0.1:8765/glossary-html")
+    config = EditorialConfig()
     entries = [GlossaryEntry("accuratezza", "Accuratezza")]
 
     result = link_file(tex, entries, config)
 
     assert result.automatic_links == 2
     assert r"\providecommand{\glslink}" in result.linked_text
-    assert r"http://127.0.0.1:8765/glossary-html\#gls-#1" in result.linked_text
+    assert r"https://alittlebyte-19.github.io/Documentazione/glossario.html\#gls-#1" in result.linked_text
     assert r"\underline{#2}\textsuperscript{\scriptsize G}" in result.linked_text
     assert result.linked_text.count(r"\glslink{accuratezza}") == 2
 
 
-def test_html_links_use_configured_http_glossary_url(tmp_path: Path):
+def test_public_links_keep_glossario_html_and_gls_anchor_format(tmp_path: Path):
     tex = tmp_path / "doc.tex"
     tex.write_text(r"\begin{document}Accuratezza.\end{document}", encoding="utf-8")
     config = EditorialConfig(
-        glossary_html_url="http://127.0.0.1:8765/glossary-html",
+        glossary_html_url="https://alittlebyte-19.github.io/Documentazione/glossario.html",
         html_anchor_format="#gls-{id}",
     )
     entries = [GlossaryEntry("accuratezza", "Accuratezza")]
 
     result = link_file(tex, entries, config)
 
-    assert r"\href{http://127.0.0.1:8765/glossary-html\#gls-#1}" in result.linked_text
+    assert r"\href{https://alittlebyte-19.github.io/Documentazione/glossario.html\#gls-#1}" in result.linked_text
 
 
 def test_link_file_updates_previous_app_managed_macro(tmp_path: Path):

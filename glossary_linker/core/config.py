@@ -3,14 +3,15 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
+import warnings
 
 import yaml
 
 
 @dataclass(slots=True)
 class EditorialConfig:
-    glossary_html_url: str = ""
-    glossary_html_path: str = "Glossario.html"
+    glossary_html_url: str = "https://alittlebyte-19.github.io/Documentazione/glossario.html"
+    glossary_json_path: str = "glossary.json"
     glossary_path: str = "Glossario.tex"
     html_anchor_format: str = "#gls-{id}"
     glossary_detection: str = "auto"
@@ -61,6 +62,8 @@ class EditorialConfig:
 @dataclass(slots=True)
 class LocalConfig:
     default_repo_root: str = "."
+    glossary_path: str = ""
+    glossary_json_path: str = ""
     last_operation: str = "link-documents"
     last_source_dir: str = "."
     last_review_order: str = "by_term"
@@ -100,15 +103,19 @@ def _coerce_dataclass(cls: type[EditorialConfig] | type[LocalConfig], data: dict
 
 
 def load_editorial_config(path: Path) -> EditorialConfig:
-    return _coerce_dataclass(EditorialConfig, _load_yaml(path))
+    return _coerce_dataclass(EditorialConfig, _migrate_legacy_html_path(_load_yaml(path), path))
 
 
 def load_local_config(path: Path) -> LocalConfig:
-    return _coerce_dataclass(LocalConfig, _load_yaml(path))
+    return _coerce_dataclass(LocalConfig, _migrate_legacy_html_path(_load_yaml(path), path))
 
 
 def save_editorial_config(config: EditorialConfig, path: Path) -> None:
-    _atomic_write_yaml(asdict(config), path)
+    payload = asdict(config)
+    # I percorsi dipendono dalla macchina e vengono salvati in LocalConfig.
+    payload.pop("glossary_path", None)
+    payload.pop("glossary_json_path", None)
+    _atomic_write_yaml(payload, path)
 
 
 def save_local_config(config: LocalConfig, path: Path) -> None:
@@ -121,3 +128,21 @@ def _atomic_write_yaml(payload: dict[str, Any], path: Path) -> None:
     tmp_path = path.with_suffix(path.suffix + ".tmp")
     tmp_path.write_text(text, encoding="utf-8")
     tmp_path.replace(path)
+
+
+def _migrate_legacy_html_path(data: dict[str, Any], source: Path) -> dict[str, Any]:
+    migrated = dict(data)
+    legacy = migrated.pop("glossary_html_path", None)
+    if legacy and not str(migrated.get("glossary_json_path", "")).strip():
+        migrated["glossary_json_path"] = _json_path_from_legacy(str(legacy))
+        warnings.warn(
+            f"{source}: 'glossary_html_path' è deprecato ed è stato migrato a "
+            f"'glossary_json_path: {migrated['glossary_json_path']}'.",
+            FutureWarning,
+            stacklevel=2,
+        )
+    return migrated
+
+
+def _json_path_from_legacy(value: str) -> str:
+    return str(Path(value).with_suffix(".json"))

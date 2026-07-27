@@ -30,7 +30,7 @@ from glossary_linker.core.glossary import (
     merge_detected_with_store,
     save_entries_store,
 )
-from glossary_linker.core.html import render_glossary_html, save_glossary_html
+from glossary_linker.core.json import GlossaryJSONError, save_glossary_json, serialize_glossary_json
 from glossary_linker.core.linker import (
     collect_manual_occurrences,
     discover_tex_files,
@@ -45,14 +45,15 @@ from glossary_linker.core.models import GlossaryEntry, Job, Occurrence
 ROOT = Path.cwd()
 EDITORIAL_PATH = ROOT / "glossary-linker.yml"
 LOCAL_PATH = ROOT / "glossary-linker.local.yml"
-ENTRIES_PATH = ROOT / "glossary-linker.entries.yml"
+STATE_DIR = ROOT / ".glossary-linker"
+ENTRIES_PATH = STATE_DIR / "entries.yml"
 
 # La guida è parte del repository e deve essere cercata rispetto alla posizione del codice
 # e non rispetto alla cartella di lavoro corrente (CWD).
 APP_DIR = Path(__file__).resolve().parent.parent.parent
 GUIDE_PATH = APP_DIR / "docs" / "USER_GUIDE.md"
 
-JOBS_DIR = ROOT / ".glossary-linker" / "jobs"
+JOBS_DIR = STATE_DIR / "jobs"
 
 
 class UserVisibleError(ValueError):
@@ -217,11 +218,26 @@ def _ensure_runtime_files() -> None:
         JOBS_DIR.mkdir(parents=True, exist_ok=True)
         if not EDITORIAL_PATH.exists():
             save_editorial_config(EditorialConfig(), EDITORIAL_PATH)
-        if not LOCAL_PATH.exists():
-            save_local_config(LocalConfig(), LOCAL_PATH)
+        editorial = load_editorial_config(EDITORIAL_PATH)
+        local = load_local_config(LOCAL_PATH) if LOCAL_PATH.exists() else LocalConfig()
+        local_text = LOCAL_PATH.read_text(encoding="utf-8") if LOCAL_PATH.exists() else ""
+        local_changed = not LOCAL_PATH.exists() or bool(re.search(r"(?m)^glossary_html_path\s*:", local_text))
+        if not local.glossary_path:
+            local.glossary_path = editorial.glossary_path
+            local_changed = True
+        if not local.glossary_json_path:
+            local.glossary_json_path = editorial.glossary_json_path
+            local_changed = True
+        if local_changed:
+            save_local_config(local, LOCAL_PATH)
+        editorial_text = EDITORIAL_PATH.read_text(encoding="utf-8")
+        if re.search(r"(?m)^(?:glossary_path|glossary_html_path|glossary_json_path)\s*:", editorial_text):
+            save_editorial_config(editorial, EDITORIAL_PATH)
         if not ENTRIES_PATH.exists():
-            save_entries_store([], ENTRIES_PATH)
-    except OSError as exc:
+            legacy_entries_path = ROOT / "glossary-linker.entries.yml"
+            legacy_entries = load_entries_store(legacy_entries_path) if legacy_entries_path.exists() else []
+            save_entries_store(legacy_entries, ENTRIES_PATH)
+    except (OSError, TypeError, ValueError) as exc:
         warnings.warn(
             f"Impossibile inizializzare i file locali di Glossary Linker: {exc}. "
             "L'app proverà comunque a usare i default in memoria.",
@@ -360,7 +376,6 @@ def create_app() -> Flask:
             local=local,
             entries=entries,
             entries_path=ENTRIES_PATH,
-            local_glossary_html_url=_local_glossary_html_url(local),
             job_locked=job_locked,
         )
 
@@ -438,6 +453,8 @@ def create_app() -> Flask:
             try:
                 local = LocalConfig(
                     default_repo_root=request.form.get("default_repo_root", "."),
+                    glossary_path=request.form.get("glossary_path", local.glossary_path).strip(),
+                    glossary_json_path=request.form.get("glossary_json_path", local.glossary_json_path).strip(),
                     last_operation=local.last_operation,
                     last_source_dir=local.last_source_dir,
                     last_review_order=local.last_review_order,
@@ -460,17 +477,15 @@ def create_app() -> Flask:
             except UserVisibleError as exc:
                 flash(str(exc), "error")
                 return redirect(url_for("settings", tab="environment"))
-            glossary_path = request.form.get("glossary_path", "").strip()
-            glossary_html_path = request.form.get("glossary_html_path", "").strip()
-            if glossary_path:
+            if local.glossary_path:
                 try:
-                    _validate_glossary_source_value(glossary_path, request.form.get("default_repo_root", "."))
+                    _validate_glossary_source_value(local.glossary_path, local.default_repo_root)
                 except UserVisibleError as exc:
                     flash(str(exc), "error")
                     return redirect(url_for("settings", tab="environment"))
-                config.glossary_path = glossary_path
-            if glossary_html_path:
-                config.glossary_html_path = glossary_html_path
+                config.glossary_path = local.glossary_path
+            if local.glossary_json_path:
+                config.glossary_json_path = local.glossary_json_path
             config.glossary_html_url = request.form.get("glossary_html_url", config.glossary_html_url)
             save_local_config(local, LOCAL_PATH)
             save_editorial_config(config, EDITORIAL_PATH)
@@ -495,18 +510,24 @@ def create_app() -> Flask:
         # Serve i file (immagini) dalla cartella docs per la guida
         return send_from_directory(GUIDE_PATH.parent, filename)
 
-    @app.get("/glossary-html")
-    def glossary_html_page():
+    @app.get("/glossary-json")
+    def glossary_json_download():
         config = _load_editorial()
         local = _load_local()
-        html_path = _configured_glossary_html_path(config, local)
-        if html_path and html_path.exists():
-            return Response(html_path.read_text(encoding="utf-8"), mimetype="text/html; charset=utf-8")
         try:
             entries = _load_entries_from_config_path(config)
-        except Exception:
-            entries = _load_entries_store_safe()
-        return Response(render_glossary_html(entries), mimetype="text/html; charset=utf-8")
+            data = serialize_glossary_json(entries)
+        except (GlossaryJSONError, OSError, UserVisibleError, ValueError) as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 400
+        target = _configured_glossary_json_path(config, local)
+        filename = target.name if target else "glossary.json"
+        if not filename.lower().endswith(".json"):
+            filename += ".json"
+        return Response(
+            data,
+            mimetype="application/json",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
 
     @app.get("/environment")
     def environment():
@@ -534,20 +555,23 @@ def create_app() -> Flask:
         config = _load_editorial()
         local = _load_local()
         _update_config_from_payload(config, payload)
-        if "glossary_html_url" not in payload and not config.glossary_html_url.strip():
-            config.glossary_html_url = _local_glossary_html_url(local)
+        _update_local_from_payload(local, payload)
+        _apply_local_glossary_paths(config, local)
         root = payload.get("repo_root", local.default_repo_root)
         local.default_repo_root = root or local.default_repo_root
         try:
             detected = _load_detected_entries(config, root)
             save_editorial_config(config, EDITORIAL_PATH)
-            save_local_config(local, LOCAL_PATH)
             if not detected:
+                _persist_glossary_json(config, local, [])
+                save_local_config(local, LOCAL_PATH)
                 return jsonify({"ok": True, "stats": _entries_stats([], 0), "entries": []})
             stored = [entry for entry in _load_entries_store_safe() if entry.id not in set(config.excluded_entry_ids)]
             entries, new_count = merge_detected_with_store(detected, stored)
+            serialize_glossary_json(entries)
             save_entries_store(entries, ENTRIES_PATH)
-            _persist_glossary_html(config, local, entries)
+            _persist_glossary_json(config, local, entries)
+            save_local_config(local, LOCAL_PATH)
             job = _load_job(payload.get("job_id") or session.get("wizard_job_id"))
             if job and not _job_has_started(job):
                 job["entries"] = [asdict(entry) for entry in entries]
@@ -564,6 +588,7 @@ def create_app() -> Flask:
         local = _load_local()
         _update_config_from_payload(config, payload)
         _update_local_from_payload(local, payload)
+        _apply_local_glossary_paths(config, local)
         save_editorial_config(config, EDITORIAL_PATH)
         save_local_config(local, LOCAL_PATH)
         job = _load_job(payload.get("job_id") or session.get("wizard_job_id"))
@@ -583,6 +608,7 @@ def create_app() -> Flask:
         local = _load_local()
         _update_config_from_payload(config, payload)
         _update_local_from_payload(local, payload)
+        _apply_local_glossary_paths(config, local)
         root = _path_from(local.default_repo_root, ".")
         source_dir = _path_from(payload.get("source_dir", local.last_source_dir), root)
         try:
@@ -612,7 +638,7 @@ def create_app() -> Flask:
             if job_locked:
                 flash("Glossario salvato per i prossimi processi. Il job corrente è già avviato: per modificare la rilevazione automatico/manuale devi chiuderlo e rifare il processo.", "warning")
             else:
-                flash("Glossario rilevato salvato in glossary-linker.entries.yml.", "success")
+                flash("Glossario rilevato salvato nello stato locale dell'app.", "success")
             return_endpoint = _entries_return_endpoint(return_to)
             if job and return_endpoint != "entries":
                 return redirect(url_for(return_endpoint, job_id=job["id"]))
@@ -641,14 +667,17 @@ def create_app() -> Flask:
         raw_text = ""
         entries: list[GlossaryEntry] = []
         source_path = request.form.get("source_glossary_path", config.glossary_path) if request.method == "POST" else config.glossary_path
-        html_output_path = request.form.get("html_output_path", config.glossary_html_path) if request.method == "POST" else (config.glossary_html_path or _default_html_output_path(source_path, local.default_repo_root))
+        json_output_path = request.form.get("json_output_path", config.glossary_json_path) if request.method == "POST" else (config.glossary_json_path or _default_json_output_path(source_path, local.default_repo_root))
         if request.method == "POST":
             config.glossary_path = source_path.strip() or config.glossary_path
-            config.glossary_html_path = html_output_path.strip() or _default_html_output_path(source_path, local.default_repo_root)
+            config.glossary_json_path = json_output_path.strip() or _default_json_output_path(source_path, local.default_repo_root)
+            local.glossary_path = config.glossary_path
+            local.glossary_json_path = config.glossary_json_path
             config.glossary_detection = _clean_detection_mode(request.form.get("glossary_detection", config.glossary_detection))
             config.glossary_custom_command = request.form.get("glossary_custom_command", config.glossary_custom_command)
             config.glossary_structure_description = request.form.get("glossary_structure_description", config.glossary_structure_description)
             save_editorial_config(config, EDITORIAL_PATH)
+            save_local_config(local, LOCAL_PATH)
             action = request.form.get("action", "format")
             raw_text = request.form.get("glossary_text", "")
             try:
@@ -657,27 +686,32 @@ def create_app() -> Flask:
                 flash(str(exc), "error")
                 glossary_text = ""
             if glossary_text:
-                entries = parse_glossary_text(glossary_text, config)
-            if action == "save_html" and entries:
+                try:
+                    entries = parse_glossary_text(glossary_text, config)
+                except ValueError as exc:
+                    flash(f"Glossario non valido: {exc}", "error")
+                    entries = []
+            if action == "export_json" and entries:
                 entries = _format_entries_from_form(entries)
                 try:
+                    serialize_glossary_json(entries)
                     save_entries_store(entries, ENTRIES_PATH)
-                    html_target = _format_html_output_target(request.form, source_path, local.default_repo_root)
-                    html_target.parent.mkdir(parents=True, exist_ok=True)
-                    save_glossary_html(entries, html_target)
-                    config.glossary_html_path = str(html_target)
-                    config.glossary_html_url = _local_glossary_html_url(local)
+                    json_target = _format_json_output_target(request.form, source_path, local.default_repo_root)
+                    save_glossary_json(entries, json_target)
+                    config.glossary_json_path = str(json_target)
+                    local.glossary_json_path = str(json_target)
                     save_editorial_config(config, EDITORIAL_PATH)
-                    flash(f"Glossario HTML salvato in {html_target}.", "success")
-                except OSError as exc:
-                    flash(f"Impossibile salvare il glossario HTML: {exc}", "error")
+                    save_local_config(local, LOCAL_PATH)
+                    flash(f"Glossario JSON salvato in {json_target}.", "success")
+                except (GlossaryJSONError, OSError) as exc:
+                    flash(f"Impossibile salvare il glossario JSON: {exc}", "error")
         return render_template(
             "format_glossary.html",
             config=config,
             local=local,
             raw_text=raw_text,
             source_path=source_path,
-            html_output_path=html_output_path or _default_html_output_path(source_path, local.default_repo_root),
+            json_output_path=json_output_path or _default_json_output_path(source_path, local.default_repo_root),
             entries=entries,
         )
 
@@ -903,7 +937,13 @@ def _load_or_generate_secret_key() -> str:
 
 def _load_editorial() -> EditorialConfig:
     try:
-        return load_editorial_config(EDITORIAL_PATH)
+        config = load_editorial_config(EDITORIAL_PATH)
+        local = _load_local()
+        if local.glossary_path:
+            config.glossary_path = local.glossary_path
+        if local.glossary_json_path:
+            config.glossary_json_path = local.glossary_json_path
+        return config
     except (OSError, ValueError, TypeError) as exc:
         _surface_local_state_warning(f"Configurazione editoriale non leggibile: {exc}. Uso i default in memoria.")
         return EditorialConfig()
@@ -951,15 +991,15 @@ def _home_status(local: LocalConfig, config: EditorialConfig, entries: list[Glos
     root = _path_from(local.default_repo_root or ".", ".")
     glossary_is_url = config.glossary_path.startswith(("http://", "https://"))
     glossary_path = None if glossary_is_url else _path_from(config.glossary_path, root)
-    glossary_html_path = _configured_glossary_html_path(config, local)
+    glossary_json_path = _configured_glossary_json_path(config, local)
     manual = sum(1 for entry in entries if entry.mode == "manual")
     return {
         "root_label": str(root),
         "root_ok": root.exists() and root.is_dir(),
         "glossary_label": config.glossary_path or "Non impostato",
         "glossary_ok": glossary_is_url or bool(glossary_path and glossary_path.exists()),
-        "glossary_html_label": str(glossary_html_path) if glossary_html_path else (config.glossary_html_url or "Non impostato"),
-        "glossary_html_ok": bool((glossary_html_path and glossary_html_path.exists()) or config.glossary_html_url.strip()),
+        "glossary_json_label": str(glossary_json_path) if glossary_json_path else "Non impostato",
+        "glossary_json_ok": bool(glossary_json_path and glossary_json_path.exists()),
         "entries_total": len(entries),
         "entries_manual": manual,
         "entries_automatic": len(entries) - manual,
@@ -1145,46 +1185,39 @@ def _format_glossary_input(source_path: str, pasted_text: str, base: str | Path 
     return read_text_safe(path)
 
 
-def _default_glossary_html_path(tex_path: Path) -> Path:
-    return tex_path.with_suffix(".html")
+def _default_glossary_json_path(tex_path: Path) -> Path:
+    return tex_path.with_suffix(".json")
 
 
-def _default_html_output_path(source_path: str, base: str | Path = ".") -> str:
+def _default_json_output_path(source_path: str, base: str | Path = ".") -> str:
     if source_path.strip():
         path = _path_from(source_path, base)
-        return str(path.with_suffix(".html"))
-    return str((ROOT / "Glossario.html").resolve())
+        return str(path.with_suffix(".json"))
+    return str((ROOT / "glossary.json").resolve())
 
 
-def _local_glossary_html_url(local: LocalConfig) -> str:
-    port = local.local_server_port or 8765
-    return f"http://127.0.0.1:{port}/glossary-html"
-
-
-def _configured_glossary_html_path(config: EditorialConfig, local: LocalConfig) -> Path | None:
-    if not config.glossary_html_path.strip():
+def _configured_glossary_json_path(config: EditorialConfig, local: LocalConfig) -> Path | None:
+    if not config.glossary_json_path.strip():
         return None
-    return _path_from(config.glossary_html_path, local.default_repo_root)
+    return _path_from(config.glossary_json_path, local.default_repo_root)
 
 
-def _persist_glossary_html(config: EditorialConfig, local: LocalConfig, entries: list[GlossaryEntry]) -> Path | None:
-    if not entries:
-        return None
-    html_path = _configured_glossary_html_path(config, local)
-    if html_path is None:
+def _persist_glossary_json(config: EditorialConfig, local: LocalConfig, entries: list[GlossaryEntry]) -> Path | None:
+    json_path = _configured_glossary_json_path(config, local)
+    if json_path is None:
         glossary_source = config.glossary_path.strip()
         if glossary_source.startswith(("http://", "https://")):
             return None
         glossary_path = _path_from(glossary_source, local.default_repo_root) if glossary_source else Path(local.default_repo_root) / "Glossario.tex"
-        html_path = _default_glossary_html_path(glossary_path)
-        config.glossary_html_path = str(html_path)
-    html_path.parent.mkdir(parents=True, exist_ok=True)
-    save_glossary_html(entries, html_path)
-    return html_path
+        json_path = _default_glossary_json_path(glossary_path)
+        config.glossary_json_path = str(json_path)
+        local.glossary_json_path = str(json_path)
+    save_glossary_json(entries, json_path)
+    return json_path
 
 
-def _format_html_output_target(form, source_path: str, base: str | Path = ".") -> Path:
-    output_path = form.get("html_output_path", "").strip() or _default_html_output_path(source_path, base)
+def _format_json_output_target(form, source_path: str, base: str | Path = ".") -> Path:
+    output_path = form.get("json_output_path", "").strip() or _default_json_output_path(source_path, base)
     return _path_from(output_path, base)
 
 
@@ -1312,7 +1345,7 @@ def _effective_glossary_source_path(config: EditorialConfig, root: str | Path) -
     configured = config.glossary_path.strip()
     if configured:
         return configured
-    inferred = _infer_glossary_source_from_html(config, root)
+    inferred = _infer_glossary_source_from_json(config, root)
     if inferred:
         config.glossary_path = str(inferred)
         return str(inferred)
@@ -1322,11 +1355,11 @@ def _effective_glossary_source_path(config: EditorialConfig, root: str | Path) -
     )
 
 
-def _infer_glossary_source_from_html(config: EditorialConfig, root: str | Path) -> Path | None:
-    if not config.glossary_html_path.strip():
+def _infer_glossary_source_from_json(config: EditorialConfig, root: str | Path) -> Path | None:
+    if not config.glossary_json_path.strip():
         return None
-    html_path = _path_from(config.glossary_html_path, root)
-    candidate = html_path.with_suffix(".tex")
+    json_path = _path_from(config.glossary_json_path, root)
+    candidate = json_path.with_suffix(".tex")
     return candidate if candidate.exists() and candidate.is_file() else None
 
 
@@ -1402,12 +1435,8 @@ def _update_rules_from_form(config: EditorialConfig) -> None:
 
 
 def _update_config_from_payload(config: EditorialConfig, payload: dict) -> None:
-    if "glossary_path" in payload and str(payload.get("glossary_path", "")).strip():
-        config.glossary_path = str(payload["glossary_path"]).strip()
     if "glossary_html_url" in payload:
         config.glossary_html_url = str(payload.get("glossary_html_url") or "")
-    if "glossary_html_path" in payload and str(payload.get("glossary_html_path", "")).strip():
-        config.glossary_html_path = str(payload["glossary_html_path"]).strip()
     if "html_anchor_format" in payload and str(payload.get("html_anchor_format", "")).strip():
         config.html_anchor_format = str(payload["html_anchor_format"]).strip()
     if "glossary_detection" in payload:
@@ -1431,10 +1460,21 @@ def _update_config_from_payload(config: EditorialConfig, payload: dict) -> None:
 
 def _update_local_from_payload(local: LocalConfig, payload: dict) -> None:
     local.default_repo_root = payload.get("repo_root", local.default_repo_root) or local.default_repo_root
+    if "glossary_path" in payload and str(payload.get("glossary_path", "")).strip():
+        local.glossary_path = str(payload["glossary_path"]).strip()
+    if "glossary_json_path" in payload and str(payload.get("glossary_json_path", "")).strip():
+        local.glossary_json_path = str(payload["glossary_json_path"]).strip()
     local.last_operation = payload.get("operation", local.last_operation) or local.last_operation
     local.last_source_dir = payload.get("source_dir", local.last_source_dir) or local.last_source_dir
     local.last_review_order = payload.get("review_order", local.last_review_order) or local.last_review_order
     local.last_new_entry_ids = payload.get("new_entry_ids", local.last_new_entry_ids)
+
+
+def _apply_local_glossary_paths(config: EditorialConfig, local: LocalConfig) -> None:
+    if local.glossary_path:
+        config.glossary_path = local.glossary_path
+    if local.glossary_json_path:
+        config.glossary_json_path = local.glossary_json_path
 
 
 def _clean_detection_mode(value: str) -> str:
@@ -1549,13 +1589,10 @@ def _start_job_processing(job: dict):
     local = _load_local()
     operation = session.get("operation", "link-documents")
     
-    if not config.glossary_html_url.strip():
-        config.glossary_html_url = _local_glossary_html_url(local)
-    
     try:
-        _persist_glossary_html(config, local, entries)
-    except OSError as exc:
-        flash(f"Impossibile preparare il glossario HTML: {exc}", "error")
+        _persist_glossary_json(config, local, entries)
+    except (GlossaryJSONError, OSError) as exc:
+        flash(f"Impossibile preparare il glossario JSON: {exc}", "error")
         return redirect(url_for("glossary_step", job_id=job.get("id")))
     
     if operation == "update-glossary":
@@ -1598,9 +1635,7 @@ def _start_job_processing(job: dict):
 def _glossary_link_warnings(config: EditorialConfig, entries: list[GlossaryEntry], root: Path) -> list[str]:
     if not entries or config.glossary_html_url.strip():
         return []
-    html_path = config.glossary_html_path or "Glossario.html"
-    target = _path_from(html_path, root)
-    return [f"URL glossario HTML non configurato: verrà usato il file locale {target.name} se disponibile."]
+    return ["URL pubblico del glossario non configurato: i link nei documenti non avranno una destinazione valida."]
 
 
 def _resolve_selected_tex_paths(raw_paths: str, root: Path) -> tuple[list[Path], list[str]]:
