@@ -27,13 +27,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_DIR"
 
-if command -v python3 >/dev/null 2>&1; then
-  PYTHON=python3
-elif command -v python >/dev/null 2>&1; then
-  PYTHON=python
-else
-  echo "Errore: Python 3.10+ non trovato nel PATH." >&2
-  exit 1
+if [[ -z "${PYTHON:-}" ]]; then
+  if command -v python3 >/dev/null 2>&1; then
+    PYTHON=python3
+  elif command -v python >/dev/null 2>&1; then
+    PYTHON=python
+  else
+    echo "Errore: Python 3.10+ non trovato nel PATH." >&2
+    exit 1
+  fi
 fi
 
 "$PYTHON" - <<'PY'

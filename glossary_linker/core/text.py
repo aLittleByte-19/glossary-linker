@@ -12,10 +12,38 @@ def slugify(value: str) -> str:
 
 
 def strip_latex(value: str) -> str:
-    value = re.sub(r"%.*", "", value)
+    value = _strip_latex_comments(value)
     value = re.sub(r"\\[a-zA-Z*]+(?:\[[^\]]*\])?", "", value)
     value = value.replace("{", "").replace("}", "")
     return re.sub(r"\s+", " ", value).strip()
+
+
+def _strip_latex_comments(value: str) -> str:
+    result: list[str] = []
+    index = 0
+    while index < len(value):
+        char = value[index]
+        if char != "%":
+            result.append(char)
+            index += 1
+            continue
+
+        backslashes = 0
+        previous = index - 1
+        while previous >= 0 and value[previous] == "\\":
+            backslashes += 1
+            previous -= 1
+
+        if backslashes % 2:
+            result.pop()
+            result.append("%")
+            index += 1
+            continue
+
+        while index < len(value) and value[index] not in "\r\n":
+            index += 1
+
+    return "".join(result)
 
 
 def parse_braced_argument(text: str, open_brace: int) -> tuple[str, int] | None:

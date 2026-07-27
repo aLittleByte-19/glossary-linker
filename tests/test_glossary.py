@@ -51,6 +51,23 @@ Misura quanto una previsione e corretta.
     assert [entry.term for entry in entries] == ["Accuratezza"]
 
 
+def test_parser_preserves_escaped_percent_in_definition():
+    text = r"""
+\subsection{Soglia di Confidenza}
+Valore limite per l'intervento manuale (es. 80\%).
+"""
+
+    entries = parse_glossary_text(text, EditorialConfig(glossary_detection="subsection"))
+
+    assert len(entries) == 1
+    assert entries[0] == GlossaryEntry(
+        id="soglia-di-confidenza",
+        term="Soglia di Confidenza",
+        definition="Valore limite per l'intervento manuale (es. 80%).",
+        aliases=[],
+    )
+
+
 def test_custom_detection_uses_user_command():
     text = r"""
 \voceGlossario{Accuratezza}
@@ -172,3 +189,17 @@ def test_save_entries_store_is_atomic_and_creates_parent(tmp_path):
     assert path.exists()
     assert load_entries_store(path)[0].id == "voce"
     assert not path.with_suffix(".yml.tmp").exists()
+
+
+def test_parse_glossary_rejects_slug_collisions_in_source():
+    source = r"""
+\begin{document}
+\subsection{Caffè}
+Prima definizione.
+\subsection{Caffe}
+Seconda definizione.
+\end{document}
+"""
+
+    with pytest.raises(ValueError, match="Collisione ID 'caffe'"):
+        parse_glossary_text(source, EditorialConfig(glossary_detection="subsection"))

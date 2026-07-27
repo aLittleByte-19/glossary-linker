@@ -33,12 +33,12 @@
     <section class="form-section guided-block glossary-review-panel">
       <div>
         <p class="section-kicker">Passo finale configurazione</p>
-        <h2>Glossario HTML</h2>
-        <p class="muted">Conferma l'URL che i documenti useranno per aprire il glossario HTML.</p>
+        <h2>Collegamenti pubblici</h2>
+        <p class="muted">Conferma l'URL della pagina pubblica che Documentazione genera a partire dal JSON.</p>
       </div>
 
-      <label>URL glossario HTML
-        <input id="glossary_html_url" name="glossary_html_url" value="{{ config.glossary_html_url or local_glossary_html_url }}" placeholder="{{ local_glossary_html_url }}" data-persist>
+      <label>URL pubblico del glossario
+        <input id="glossary_html_url" name="glossary_html_url" value="{{ config.glossary_html_url }}" placeholder="https://alittlebyte-19.github.io/Documentazione/glossario.html" data-persist>
       </label>
 
       <div class="stats compact-stats">

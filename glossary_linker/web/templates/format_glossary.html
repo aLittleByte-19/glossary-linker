@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block progress %}
-<nav class="workflow-progress" aria-label="Avanzamento formattazione glossario">
+<nav class="workflow-progress" aria-label="Avanzamento esportazione glossario JSON">
   <a href="{{ url_for('project_step') }}">Operazione</a>
   <a class="active" href="#format-input">Input</a>
   <a href="#format-detection">Rilevamento</a>
@@ -17,8 +17,8 @@
 <section class="panel">
   <div class="page-head">
     <div>
-      <h1>Formatta Glossario .tex</h1>
-      <p>Leggi un glossario LaTeX, conferma le voci e genera l'HTML navigabile usato dai link nei documenti.</p>
+      <h1>Esporta glossario JSON</h1>
+      <p>Leggi un glossario LaTeX, conferma le voci ed esporta il JSON consumato da Documentazione.</p>
     </div>
     <div class="page-actions">
       <a class="button-link" href="{{ url_for('project_step') }}">Torna alla home</a>
@@ -39,10 +39,10 @@
           <button type="button" data-picker data-kind="file" data-target="#source_glossary_path">Scegli</button>
         </span>
       </label>
-      <label>File HTML da generare
+      <label>File JSON da generare
         <span class="field-with-action wide">
-          <input id="html_output_path" name="html_output_path" value="{{ html_output_path }}" placeholder="/percorso/Glossario.html">
-          <button type="button" data-picker data-kind="file" data-target="#html_output_path">Scegli</button>
+          <input id="json_output_path" name="json_output_path" value="{{ json_output_path }}" placeholder="/percorso/.github/site-src/glossary.json">
+          <button type="button" data-picker data-kind="file" data-target="#json_output_path">Scegli</button>
         </span>
       </label>
       <label>Oppure incolla contenuto LaTeX
@@ -143,16 +143,18 @@
       <section id="format-output" class="form-section guided-block">
         <div>
           <p class="section-kicker">Passo 4</p>
-          <h2>Generazione HTML</h2>
-          <p class="muted">Scegli dove salvare il glossario HTML. Lo stesso file sarà servito anche dall'URL locale dell'app.</p>
+          <h2>Esportazione JSON</h2>
+          <p class="muted">Salva le inclusioni, le definizioni e gli alias revisionati nell'unico file dati del glossario, pronto per <code>.github/site-src/glossary.json</code> in Documentazione.</p>
         </div>
         <div class="summary-row">
-          <span>File HTML</span>
-          <code>{{ html_output_path }}</code>
+          <span>File JSON</span>
+          <code>{{ json_output_path }}</code>
         </div>
+        <p class="muted"><strong>Salva JSON revisionato</strong> applica i valori mostrati nel form e scrive il file nel percorso indicato. <strong>Scarica JSON dal sorgente</strong> rilegge invece il file <code>.tex</code> configurato e non include modifiche del form non ancora salvate.</p>
         <div class="actions">
           <button name="action" value="format" type="submit">Aggiorna rilevamento</button>
-          <button class="primary" name="action" value="save_html" type="submit">Genera HTML</button>
+          <button class="primary" name="action" value="export_json" type="submit">Salva JSON revisionato</button>
+          <a class="button-link" href="{{ url_for('glossary_json_download') }}">Scarica JSON dal sorgente</a>
         </div>
       </section>
     {% endif %}

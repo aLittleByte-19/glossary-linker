@@ -166,7 +166,7 @@
           <section id="glossary-paths" class="form-section">
             <div>
               <h2>Glossario</h2>
-              <p class="muted">Il sorgente LaTeX viene letto dal parser; il file HTML e l'output navigabile servito dall'app e usato dai link.</p>
+              <p class="muted">Il sorgente LaTeX viene letto dal parser; il JSON è l'unico file del glossario prodotto dal tool. L'URL pubblico viene usato solo nei link dei documenti.</p>
             </div>
             <label>Glossario sorgente .tex
               <span class="field-with-action wide">
@@ -174,14 +174,14 @@
                 <button type="button" data-picker data-kind="file" data-target="#settings_glossary_path">Scegli</button>
               </span>
             </label>
-            <label>Glossario HTML generato
+            <label>Glossario JSON generato
               <span class="field-with-action wide">
-                <input id="settings_glossary_html_path" name="glossary_html_path" value="{{ config.glossary_html_path }}" placeholder="/percorso/Glossario.html">
-                <button type="button" data-picker data-kind="file" data-target="#settings_glossary_html_path">Scegli</button>
+                <input id="settings_glossary_json_path" name="glossary_json_path" value="{{ config.glossary_json_path }}" placeholder="/percorso/.github/site-src/glossary.json">
+                <button type="button" data-picker data-kind="file" data-target="#settings_glossary_json_path">Scegli</button>
               </span>
             </label>
-            <label>URL glossario HTML
-              <input name="glossary_html_url" value="{{ config.glossary_html_url }}" placeholder="http://127.0.0.1:8765/glossary-html">
+            <label>URL pubblico del glossario
+              <input name="glossary_html_url" value="{{ config.glossary_html_url }}" placeholder="https://alittlebyte-19.github.io/Documentazione/glossario.html">
             </label>
           </section>
 

@@ -308,11 +308,14 @@ def _valid_detected_term(term: str) -> bool:
 
 def _deduplicate_entries(entries: list[GlossaryEntry]) -> list[GlossaryEntry]:
     result: list[GlossaryEntry] = []
-    seen: set[str] = set()
+    seen: dict[str, str] = {}
     for entry in entries:
         if entry.id in seen:
-            continue
-        seen.add(entry.id)
+            raise ValueError(
+                f"Collisione ID '{entry.id}' tra le voci '{seen[entry.id]}' e '{entry.term}'. "
+                "Correggi o rinomina i termini nel glossario sorgente."
+            )
+        seen[entry.id] = entry.term
         result.append(entry)
     return result
 

@@ -1,9 +1,11 @@
 from dataclasses import asdict
+import json
 
 import pytest
 
-from glossary_linker.core.config import EditorialConfig, LocalConfig, save_editorial_config, save_local_config
+from glossary_linker.core.config import EditorialConfig, LocalConfig, load_local_config, save_editorial_config, save_local_config
 from glossary_linker.core.glossary import load_entries_store, save_entries_store
+from glossary_linker.core.json import serialize_glossary_json
 from glossary_linker.core.linker import collect_manual_occurrences, link_file
 from glossary_linker.core.models import GlossaryEntry, ProcessingReport, Job
 from glossary_linker.web.app import create_app, _glossary_link_warnings, _save_job, _load_job
@@ -114,17 +116,17 @@ def test_output_does_not_print_missing_term_names(monkeypatch, tmp_path):
     assert "Termine Assente" not in html
 
 
-def test_glossary_link_warning_requires_generated_html_url(tmp_path):
+def test_glossary_link_warning_requires_public_url(tmp_path):
     config = EditorialConfig(glossary_path="Glossario.tex", glossary_html_url="")
     entries = [GlossaryEntry("accuratezza", "Accuratezza")]
 
     warnings = _glossary_link_warnings(config, entries, tmp_path)
 
     assert warnings
-    assert "Glossario.html" in warnings[0]
+    assert "URL pubblico" in warnings[0]
 
 
-def test_glossary_html_route_renders_entries_from_configured_tex(monkeypatch, tmp_path):
+def test_glossary_json_download_uses_exact_contract_content_type_and_filename(monkeypatch, tmp_path):
     import glossary_linker.web.app as webapp
 
     glossary = tmp_path / "Glossario.tex"
@@ -137,43 +139,43 @@ Definizione.
     )
     editorial_path = tmp_path / "glossary-linker.yml"
     local_path = tmp_path / "glossary-linker.local.yml"
-    save_editorial_config(EditorialConfig(glossary_path="Glossario.tex", glossary_detection="subsection"), editorial_path)
-    save_local_config(LocalConfig(default_repo_root=str(tmp_path)), local_path)
+    save_editorial_config(EditorialConfig(glossary_detection="subsection"), editorial_path)
+    save_local_config(LocalConfig(
+        default_repo_root=str(tmp_path),
+        glossary_path="Glossario.tex",
+        glossary_json_path="public/glossary.json",
+    ), local_path)
     monkeypatch.setattr(webapp, "EDITORIAL_PATH", editorial_path)
     monkeypatch.setattr(webapp, "LOCAL_PATH", local_path)
     app = create_app()
     client = app.test_client()
 
-    response = client.get("/glossary-html")
-    html = response.get_data(as_text=True)
+    response = client.get("/glossary-json")
 
     assert response.status_code == 200
-    assert 'id="gls-accuratezza"' in html
-    assert 'id="glossary-search"' in html
-    assert "Accuratezza" in html
+    assert response.mimetype == "application/json"
+    assert response.headers["Content-Disposition"] == 'attachment; filename="glossary.json"'
+    assert json.loads(response.data) == {
+        "title": "Glossario",
+        "entries": [{
+            "id": "accuratezza",
+            "term": "Accuratezza",
+            "definition": "Definizione.",
+            "aliases": [],
+        }],
+    }
+    assert response.data == serialize_glossary_json([
+        GlossaryEntry("accuratezza", "Accuratezza", "Definizione.")
+    ])
 
 
-def test_glossary_html_route_serves_configured_generated_file(monkeypatch, tmp_path):
-    import glossary_linker.web.app as webapp
-
-    html_path = tmp_path / "public" / "Glossario.html"
-    html_path.parent.mkdir()
-    html_path.write_text("<!doctype html><title>Generato</title><p>file corretto</p>", encoding="utf-8")
-    editorial_path = tmp_path / "glossary-linker.yml"
-    local_path = tmp_path / "glossary-linker.local.yml"
-    save_editorial_config(EditorialConfig(glossary_html_path=str(html_path)), editorial_path)
-    save_local_config(LocalConfig(default_repo_root=str(tmp_path)), local_path)
-    monkeypatch.setattr(webapp, "EDITORIAL_PATH", editorial_path)
-    monkeypatch.setattr(webapp, "LOCAL_PATH", local_path)
+def test_glossary_html_route_no_longer_exists():
     app = create_app()
     client = app.test_client()
 
     response = client.get("/glossary-html")
-    html = response.get_data(as_text=True)
 
-    assert response.status_code == 200
-    assert "file corretto" in html
-    assert "Glossario</title>" not in html
+    assert response.status_code == 404
 
 
 def test_entries_page_is_only_for_modes_and_aliases(monkeypatch, tmp_path):
@@ -325,15 +327,19 @@ def test_settings_persist_glossary_paths(monkeypatch, tmp_path):
         "log_level": "INFO",
         "preferred_browser": "",
         "glossary_path": "docs/Glossario.tex",
-        "glossary_html_path": "public/Glossario.html",
-        "glossary_html_url": "http://127.0.0.1:8765/glossary-html",
+        "glossary_json_path": "public/glossary.json",
+        "glossary_html_url": "https://alittlebyte-19.github.io/Documentazione/glossario.html",
     })
 
-    saved = webapp.load_editorial_config(editorial_path)
+    saved = webapp.load_local_config(local_path)
 
     assert response.status_code == 302
     assert saved.glossary_path == "docs/Glossario.tex"
-    assert saved.glossary_html_path == "public/Glossario.html"
+    assert saved.glossary_json_path == "public/glossary.json"
+    shared_text = editorial_path.read_text(encoding="utf-8")
+    assert "glossary_path:" not in shared_text
+    assert "glossary_html_path:" not in shared_text
+    assert "glossary_json_path:" not in shared_text
 
 
 def test_create_app_bootstraps_runtime_files(monkeypatch, tmp_path):
@@ -341,7 +347,7 @@ def test_create_app_bootstraps_runtime_files(monkeypatch, tmp_path):
 
     monkeypatch.setattr(webapp, "EDITORIAL_PATH", tmp_path / "glossary-linker.yml")
     monkeypatch.setattr(webapp, "LOCAL_PATH", tmp_path / "glossary-linker.local.yml")
-    monkeypatch.setattr(webapp, "ENTRIES_PATH", tmp_path / "glossary-linker.entries.yml")
+    monkeypatch.setattr(webapp, "ENTRIES_PATH", tmp_path / ".glossary-linker" / "entries.yml")
     monkeypatch.setattr(webapp, "JOBS_DIR", tmp_path / ".glossary-linker" / "jobs")
 
     create_app()
@@ -352,6 +358,38 @@ def test_create_app_bootstraps_runtime_files(monkeypatch, tmp_path):
     assert webapp.JOBS_DIR.exists()
     assert (tmp_path / ".glossary-linker-secret").exists()
     assert load_entries_store(webapp.ENTRIES_PATH) == []
+
+
+def test_create_app_migrates_legacy_glossary_state(monkeypatch, tmp_path):
+    import glossary_linker.web.app as webapp
+
+    editorial_path = tmp_path / "glossary-linker.yml"
+    local_path = tmp_path / "glossary-linker.local.yml"
+    entries_path = tmp_path / ".glossary-linker" / "entries.yml"
+    legacy_entries_path = tmp_path / "glossary-linker.entries.yml"
+    editorial_path.write_text(
+        "glossary_path: docs/Glossario.tex\n"
+        "glossary_html_path: public/Glossario.html\n"
+        "glossary_detection: subsection\n",
+        encoding="utf-8",
+    )
+    save_entries_store([GlossaryEntry("voce", "Voce")], legacy_entries_path)
+    monkeypatch.setattr(webapp, "ROOT", tmp_path)
+    monkeypatch.setattr(webapp, "EDITORIAL_PATH", editorial_path)
+    monkeypatch.setattr(webapp, "LOCAL_PATH", local_path)
+    monkeypatch.setattr(webapp, "ENTRIES_PATH", entries_path)
+    monkeypatch.setattr(webapp, "JOBS_DIR", tmp_path / ".glossary-linker" / "jobs")
+
+    with pytest.warns(FutureWarning, match="glossary_html_path.*glossary_json_path"):
+        create_app()
+
+    local = load_local_config(local_path)
+    assert local.glossary_path == "docs/Glossario.tex"
+    assert local.glossary_json_path == "public/Glossario.json"
+    assert [entry.id for entry in load_entries_store(entries_path)] == ["voce"]
+    shared_text = editorial_path.read_text(encoding="utf-8")
+    assert "glossary_path:" not in shared_text
+    assert "glossary_html_path:" not in shared_text
 
 
 def test_output_page_no_longer_requires_overwrite_confirmation_checkbox(monkeypatch, tmp_path):
@@ -386,8 +424,11 @@ def test_format_glossary_preview_confirms_detected_entries(monkeypatch, tmp_path
     import glossary_linker.web.app as webapp
 
     editorial_path = tmp_path / "glossary-linker.yml"
+    local_path = tmp_path / "glossary-linker.local.yml"
     save_editorial_config(EditorialConfig(), editorial_path)
+    save_local_config(LocalConfig(), local_path)
     monkeypatch.setattr(webapp, "EDITORIAL_PATH", editorial_path)
+    monkeypatch.setattr(webapp, "LOCAL_PATH", local_path)
     app = create_app()
     client = app.test_client()
 
@@ -409,10 +450,13 @@ def test_format_glossary_save_excludes_unchecked_entries(monkeypatch, tmp_path):
 
     entries_path = tmp_path / "entries.yml"
     editorial_path = tmp_path / "glossary-linker.yml"
-    output_path = tmp_path / "Glossario.html"
+    local_path = tmp_path / "glossary-linker.local.yml"
+    output_path = tmp_path / "glossary.json"
     save_editorial_config(EditorialConfig(), editorial_path)
+    save_local_config(LocalConfig(), local_path)
     monkeypatch.setattr(webapp, "ENTRIES_PATH", entries_path)
     monkeypatch.setattr(webapp, "EDITORIAL_PATH", editorial_path)
+    monkeypatch.setattr(webapp, "LOCAL_PATH", local_path)
     app = create_app()
     client = app.test_client()
 
@@ -427,13 +471,18 @@ def test_format_glossary_save_excludes_unchecked_entries(monkeypatch, tmp_path):
         "definition_voce-errata": "No.",
         "aliases_voce-buona": "",
         "aliases_voce-errata": "",
-        "html_output_path": str(output_path),
-        "action": "save_html",
+        "json_output_path": str(output_path),
+        "action": "export_json",
     })
 
     assert response.status_code == 200
     assert output_path.exists()
-    assert 'id="gls-voce-buona"' in output_path.read_text(encoding="utf-8")
+    assert json.loads(output_path.read_text(encoding="utf-8"))["entries"] == [{
+        "id": "voce-buona",
+        "term": "Voce Buona",
+        "definition": "Ok.",
+        "aliases": [],
+    }]
     assert [entry.id for entry in load_entries_store(entries_path)] == ["voce-buona"]
 
 
@@ -446,7 +495,7 @@ def test_manual_occurrence_id_matches_linking_with_spaces_in_path(tmp_path):
         "\\begin{document}\nQui compare Termine Manuale nel testo.\n\\end{document}\n",
         encoding="utf-8",
     )
-    config = EditorialConfig(glossary_html_url="http://127.0.0.1:8765/glossary-html")
+    config = EditorialConfig(glossary_html_url="https://alittlebyte-19.github.io/Documentazione/glossario.html")
     entries = [GlossaryEntry("termine-manuale", "Termine Manuale", mode="manual")]
 
     occurrences = collect_manual_occurrences([source], entries, config, root=root)
@@ -695,7 +744,7 @@ def test_wizard_steps_resume_saved_job_from_review_back_link(monkeypatch, tmp_pa
     source.write_text("Termine Manuale", encoding="utf-8")
     _save_job({
         "id": "resume-job",
-        "config": asdict(EditorialConfig(glossary_html_url="http://127.0.0.1:8765/glossary-html")),
+        "config": asdict(EditorialConfig(glossary_html_url="https://alittlebyte-19.github.io/Documentazione/glossario.html")),
         "entries": [asdict(GlossaryEntry("termine-manuale", "Termine Manuale", mode="manual"))],
         "paths": [str(source)],
         "root": str(tmp_path),
@@ -936,19 +985,19 @@ def test_glossary_preview_does_not_clear_source_when_payload_omits_field(monkeyp
     editorial_path = tmp_path / "glossary-linker.yml"
     local_path = tmp_path / "glossary-linker.local.yml"
     entries_path = tmp_path / "entries.yml"
-    save_editorial_config(EditorialConfig(glossary_path="Glossario.tex", glossary_detection="subsection"), editorial_path)
-    save_local_config(LocalConfig(default_repo_root=str(tmp_path)), local_path)
+    save_editorial_config(EditorialConfig(glossary_detection="subsection"), editorial_path)
+    save_local_config(LocalConfig(default_repo_root=str(tmp_path), glossary_path="Glossario.tex"), local_path)
     monkeypatch.setattr(webapp, "EDITORIAL_PATH", editorial_path)
     monkeypatch.setattr(webapp, "LOCAL_PATH", local_path)
     monkeypatch.setattr(webapp, "ENTRIES_PATH", entries_path)
     app = create_app()
     client = app.test_client()
 
-    response = client.post("/glossary-preview", json={"glossary_html_url": "http://127.0.0.1:8765/glossary-html"})
+    response = client.post("/glossary-preview", json={"glossary_html_url": "https://alittlebyte-19.github.io/Documentazione/glossario.html"})
 
     assert response.status_code == 200
     assert response.get_json()["stats"]["total"] == 1
-    assert webapp.load_editorial_config(editorial_path).glossary_path == "Glossario.tex"
+    assert webapp.load_local_config(local_path).glossary_path == "Glossario.tex"
 
 
 def test_glossary_preview_updates_active_wizard_job(monkeypatch, tmp_path):
@@ -963,8 +1012,8 @@ def test_glossary_preview_updates_active_wizard_job(monkeypatch, tmp_path):
     monkeypatch.setattr(webapp, "LOCAL_PATH", local_path)
     monkeypatch.setattr(webapp, "ENTRIES_PATH", entries_path)
     monkeypatch.setattr(webapp, "JOBS_DIR", tmp_path / "jobs")
-    save_editorial_config(EditorialConfig(glossary_path="Glossario.tex", glossary_detection="subsection"), editorial_path)
-    save_local_config(LocalConfig(default_repo_root=str(tmp_path)), local_path)
+    save_editorial_config(EditorialConfig(glossary_detection="subsection"), editorial_path)
+    save_local_config(LocalConfig(default_repo_root=str(tmp_path), glossary_path="Glossario.tex"), local_path)
     _save_job({
         "id": "preview-job",
         "config": asdict(EditorialConfig(glossary_path="Glossario.tex", glossary_detection="subsection")),
@@ -996,7 +1045,7 @@ def test_started_job_keeps_snapshot_when_glossary_store_changes(monkeypatch, tmp
     client = app.test_client()
     _save_job({
         "id": "rerun-job",
-        "config": asdict(EditorialConfig(glossary_html_url="http://127.0.0.1:8765/glossary-html")),
+        "config": asdict(EditorialConfig(glossary_html_url="https://alittlebyte-19.github.io/Documentazione/glossario.html")),
         "entries": [asdict(GlossaryEntry("voce-vecchia", "Voce Vecchia", mode="manual"))],
         "paths": [str(source)],
         "root": str(tmp_path),
@@ -1020,7 +1069,7 @@ def test_started_job_keeps_snapshot_when_glossary_store_changes(monkeypatch, tmp
     })
 
     response = client.post("/glossary?job_id=rerun-job", data={
-        "glossary_html_url": "http://127.0.0.1:8765/glossary-html",
+        "glossary_html_url": "https://alittlebyte-19.github.io/Documentazione/glossario.html",
         "entry_id": ["voce-nuova"],
         "action": "continue",
     })
@@ -1040,8 +1089,8 @@ def test_glossary_preview_rejects_directory_source_with_clear_message(monkeypatc
 
     editorial_path = tmp_path / "glossary-linker.yml"
     local_path = tmp_path / "glossary-linker.local.yml"
-    save_editorial_config(EditorialConfig(glossary_path=""), editorial_path)
-    save_local_config(LocalConfig(default_repo_root=str(tmp_path)), local_path)
+    save_editorial_config(EditorialConfig(), editorial_path)
+    save_local_config(LocalConfig(default_repo_root=str(tmp_path), glossary_path=""), local_path)
     monkeypatch.setattr(webapp, "EDITORIAL_PATH", editorial_path)
     monkeypatch.setattr(webapp, "LOCAL_PATH", local_path)
     app = create_app()
@@ -1067,7 +1116,7 @@ def test_glossary_step_rehydrates_empty_job_from_entries_store(monkeypatch, tmp_
     client = app.test_client()
     _save_job({
         "id": "empty-job",
-        "config": asdict(EditorialConfig(glossary_html_url="http://127.0.0.1:8765/glossary-html")),
+        "config": asdict(EditorialConfig(glossary_html_url="https://alittlebyte-19.github.io/Documentazione/glossario.html")),
         "entries": [],
         "paths": [],
         "root": str(tmp_path),
@@ -1086,8 +1135,8 @@ def test_settings_rejects_glossary_source_directory(monkeypatch, tmp_path):
 
     editorial_path = tmp_path / "glossary-linker.yml"
     local_path = tmp_path / "glossary-linker.local.yml"
-    save_editorial_config(EditorialConfig(glossary_path="Glossario.tex"), editorial_path)
-    save_local_config(LocalConfig(default_repo_root=str(tmp_path)), local_path)
+    save_editorial_config(EditorialConfig(), editorial_path)
+    save_local_config(LocalConfig(default_repo_root=str(tmp_path), glossary_path="Glossario.tex"), local_path)
     monkeypatch.setattr(webapp, "EDITORIAL_PATH", editorial_path)
     monkeypatch.setattr(webapp, "LOCAL_PATH", local_path)
     app = create_app()
@@ -1108,11 +1157,11 @@ def test_settings_rejects_glossary_source_directory(monkeypatch, tmp_path):
         "log_level": "INFO",
         "preferred_browser": "",
         "glossary_path": str(tmp_path),
-        "glossary_html_path": "Glossario.html",
-        "glossary_html_url": "http://127.0.0.1:8765/glossary-html",
+        "glossary_json_path": "glossary.json",
+        "glossary_html_url": "https://alittlebyte-19.github.io/Documentazione/glossario.html",
     }, follow_redirects=True)
     html = response.get_data(as_text=True)
 
     assert response.status_code == 200
     assert "non una directory" in html
-    assert webapp.load_editorial_config(editorial_path).glossary_path == "Glossario.tex"
+    assert webapp.load_local_config(local_path).glossary_path == "Glossario.tex"
